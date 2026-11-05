@@ -110,6 +110,11 @@ function tenantSql(p: "a" | "b"): string {
     insert into public.segment_speeds (tenant_id, osm_way_id, forward, weekday, hour, sample_count, mean_speed_kmh) values
       ('${t.tenant}', 1000, true, 1, 8, 20, 32.5);
 
+    insert into public.integration_outbox (tenant_id, provider, event, target_id, payload) values
+      ('${t.tenant}', 'billzilla', 'delivery.updated', 'BZ-I-${p}1', '{}');
+    insert into public.integration_deliveries (tenant_id, provider, delivery_id, event) values
+      ('${t.tenant}', 'billzilla', 'delivery-${p}1', 'invoice.confirmed');
+
     insert into storage.objects (bucket_id, name) values
       ('location-photos', '${t.tenant}/${t.shop1}.jpg'),
       ('delivery-proofs', '${t.tenant}/${t.sentStop}/photo.jpg');
