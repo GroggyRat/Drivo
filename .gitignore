@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# env files
+.env*
+!.env.example
+
+# local Supabase
+supabase/.branches
+supabase/.temp
+
+# routing data (downloaded OSM extracts and built Valhalla tiles)
+routing/data/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks
+
+# misc
+.DS_Store
+*.log
+coverage/
