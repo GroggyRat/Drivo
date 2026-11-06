@@ -40,6 +40,9 @@ export async function getContext() {
     .order("created_at");
   const memberships = ((data ?? []) as unknown as Membership[]).filter((m) => m.tenant);
 
+  // KaiTech platform owners: they manage tenants in /platform and see no tenant data.
+  const { data: platformRow } = await supabase.from("platform_admins").select("user_id, full_name").eq("user_id", userId).maybeSingle();
+
   const cookieStore = await cookies();
   const wanted = cookieStore.get(TENANT_COOKIE)?.value;
   const active =
@@ -56,6 +59,8 @@ export async function getContext() {
     role: active?.role ?? null,
     isAdmin: active?.role === "owner" || active?.role === "admin",
     isManager: !!active && active.role !== "driver",
+    isPlatformAdmin: !!platformRow,
+    platformName: (platformRow?.full_name as string | undefined) ?? null,
   };
 }
 
@@ -65,7 +70,7 @@ export type ManagerContext = Context & { tenant: Tenant; role: Role; active: Mem
 /** For pages for Owners, Admins and Dispatchers. */
 export async function requireManager(): Promise<ManagerContext> {
   const ctx = await getContext();
-  if (!ctx.isManager || !ctx.tenant) redirect("/no-access");
+  if (!ctx.isManager || !ctx.tenant) redirect(ctx.isPlatformAdmin ? "/platform" : "/no-access");
   return ctx as ManagerContext;
 }
 
@@ -73,5 +78,12 @@ export async function requireManager(): Promise<ManagerContext> {
 export async function requireAdmin(): Promise<ManagerContext> {
   const ctx = await requireManager();
   if (!ctx.isAdmin) redirect("/?notice=admins-only");
+  return ctx;
+}
+
+/** For the KaiTech platform console. */
+export async function requirePlatformAdmin() {
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) redirect(ctx.isManager ? "/" : "/no-access");
   return ctx;
 }

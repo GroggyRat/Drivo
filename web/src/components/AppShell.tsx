@@ -15,11 +15,12 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: IconSettings },
 ];
 
-export function AppShell({ tenantName, userName, roleLabel, tenantSwitcher, children }: {
+export function AppShell({ tenantName, userName, roleLabel, tenantSwitcher, platformLink, children }: {
   tenantName: string;
   userName: string;
   roleLabel: string;
   tenantSwitcher?: ReactNode;
+  platformLink?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -53,6 +54,11 @@ export function AppShell({ tenantName, userName, roleLabel, tenantSwitcher, chil
               {label}
             </Link>
           ))}
+          {platformLink && (
+            <Link href="/platform" className="flex min-h-10 items-center gap-2.5 rounded-[var(--radius-control)] px-3 text-sm font-medium whitespace-nowrap text-[#d6deeb] hover:bg-white/10 hover:text-white lg:mt-3 lg:border-t lg:border-white/15 lg:pt-3">
+              <IconSettings /> Platform console
+            </Link>
+          )}
         </nav>
         <div className="hidden px-5 py-4 lg:absolute lg:inset-x-0 lg:bottom-0 lg:block">
           {tenantSwitcher}

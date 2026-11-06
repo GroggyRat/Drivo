@@ -13,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       userName={ctx.active.full_name}
       roleLabel={ROLE_LABEL[ctx.role]}
       tenantSwitcher={options.length > 1 ? <TenantSwitcher options={options} current={ctx.tenant.id} /> : null}
+      platformLink={ctx.isPlatformAdmin}
     >
       {children}
     </AppShell>
