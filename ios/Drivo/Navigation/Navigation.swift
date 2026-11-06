@@ -7,7 +7,7 @@ import Supabase
 /// backend (/api/navigation/route), which checks the driver's sign-in and
 /// passes the request to the routing server; the routing key stays on the
 /// server. Ferrostar provides the turn banner, rerouting and spoken
-/// instructions. Built against Ferrostar 0.30: check these names when
+/// instructions. Built against Ferrostar 0.32: check these names when
 /// upgrading, as its API still moves between releases.
 @MainActor
 enum Navigation {
