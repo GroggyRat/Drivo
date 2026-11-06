@@ -71,7 +71,7 @@ final class AppModel: ObservableObject {
             let shifts = channel.broadcastStream(event: "shift")
             await channel.subscribe()
             for await message in shifts {
-                guard case let .object(payload)? = message["payload"] ?? .object(message),
+                guard case let .object(payload) = message["payload"] ?? .object(message),
                       case let .string(driver)? = payload["driver_id"], driver == repo.userId else { continue }
                 if case .bool(true)? = payload["tracking"] { LocationTracker.shared.start(vehicleId: active?.vehicleId) }
                 else { LocationTracker.shared.stop() }

@@ -78,7 +78,9 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
 
     private func prepare() async {
         let repo = Repository.shared
-        guard let m = repo.membership ?? (try? await repo.loadMembership()) else { return }
+        var membership = repo.membership
+        if membership == nil { membership = try? await repo.loadMembership() }
+        guard let m = membership else { return }
         if let s = await repo.settings() { monitor = SpeedMonitor(afterMs: Int64(s.alertAfterS) * 1000, toleranceKmh: s.toleranceKmh) }
         limits = await repo.speedLimits()
         let ch = repo.client.channel("tenant:\(m.tenantId)")
