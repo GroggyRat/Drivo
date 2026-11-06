@@ -478,9 +478,9 @@ begin
   for p in
     select e from jsonb_array_elements(new.points) e
     where jsonb_typeof(e) = 'array' and jsonb_array_length(e) >= 3
-    order by (e ->> 0)::bigint
+    order by (e ->> 0)::double precision
   loop
-    v_at := to_timestamp((p ->> 0)::bigint / 1000.0);
+    v_at := to_timestamp((p ->> 0)::double precision / 1000.0);
     v_point := app.make_point((p ->> 1)::double precision, (p ->> 2)::double precision);
     v_speed := round(coalesce((p ->> 4)::numeric, 0) * 3.6, 1);
     v_last := p;
@@ -515,7 +515,7 @@ begin
     insert into public.driver_positions (tenant_id, driver_id, vehicle_id, route_id, recorded_at, point, speed_kmh, heading_deg, accuracy_m, updated_at)
     values (
       new.tenant_id, new.driver_id, coalesce(new.vehicle_id, v_route.vehicle_id), v_route.id,
-      to_timestamp((v_last ->> 0)::bigint / 1000.0),
+      to_timestamp((v_last ->> 0)::double precision / 1000.0),
       app.make_point((v_last ->> 1)::double precision, (v_last ->> 2)::double precision),
       round(coalesce((v_last ->> 4)::numeric, 0) * 3.6, 1), (v_last ->> 5)::numeric, (v_last ->> 3)::numeric, now()
     )
@@ -702,7 +702,7 @@ begin
 
   with pts as (
     select
-      to_timestamp((e ->> 0)::bigint / 1000.0) as at,
+      to_timestamp((e ->> 0)::double precision / 1000.0) as at,
       extensions.st_setsrid(extensions.st_makepoint((e ->> 1)::double precision, (e ->> 2)::double precision), 4326) as g,
       coalesce((e ->> 4)::numeric, 0) as mps
     from public.gps_batches b, jsonb_array_elements(b.points) e

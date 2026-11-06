@@ -1,0 +1,3 @@
+{
+  "crons": [{ "path": "/api/integrations/outbox", "schedule": "*/5 * * * *" }]
+}

@@ -10,6 +10,7 @@
     "db:reset": "supabase db reset"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "pg": "^8.23.1",
