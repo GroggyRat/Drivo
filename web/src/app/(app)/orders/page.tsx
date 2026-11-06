@@ -7,11 +7,12 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { requireManager } from "@/lib/tenant";
 import { importOrders, syncFromBillzilla } from "./actions";
 import { DeliveryForm } from "./DeliveryForm";
+import { PLACE_CHANGEABLE } from "./place";
 
 export const metadata: Metadata = { title: "Ready for delivery" };
 export const dynamic = "force-dynamic";
 
-type SP = Promise<{ tab?: string; notice?: string; count?: string; error?: string; problems?: string; mock?: string; pending?: string }>;
+type SP = Promise<{ tab?: string; notice?: string; count?: string; error?: string; problems?: string; mock?: string; pending?: string; customer?: string }>;
 
 export default async function OrdersPage({ searchParams }: { searchParams: SP }) {
   const ctx = await requireManager();
@@ -53,6 +54,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
       {sp.notice === "synced" && <div className="mb-4"><Notice tone="green">Checked BillZilla: {sp.count} confirmed invoice{sp.count === "1" ? "" : "s"} stored or updated.{sp.mock ? " (BillZilla is not connected yet; these are sample invoices.)" : ""}</Notice></div>}
       {sp.notice === "not-linked" && <div className="mb-4"><Notice tone="amber">This company is not linked to BillZilla. KaiTech links it on request.</Notice></div>}
       {sp.notice === "added" && <div className="mb-4"><Notice tone={sp.pending ? "amber" : "green"}>{sp.pending ? "Delivery added. The new place is waiting for an Owner or Admin to approve it on Locations; it can be routed after that." : "Delivery added. It is ready to plan."}</Notice></div>}
+      {sp.notice === "place-changed" && <div className="mb-4"><Notice tone={sp.pending ? "amber" : "green"}>{sp.pending ? "Place changed. The new place is waiting for an Owner or Admin to approve it on Locations; the invoice can be routed after that." : "Place changed. Plan the route again if this invoice was already in a plan you had open."}</Notice></div>}
+      {sp.notice === "place-pending" && <div className="mb-4"><Notice tone="amber">The new place is waiting for an Owner or Admin to approve it on Locations. When they approve it, link {sp.customer ?? "the customer"} to it there.</Notice></div>}
       {sp.notice === "imported" && <div className="mb-4"><Notice tone={sp.problems ? "amber" : "green"}>{sp.count} orders imported.{sp.problems ? ` Not imported: ${sp.problems}` : ""}</Notice></div>}
       {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}
 
@@ -102,7 +105,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
                       <td>{formatMoney(r.total_amount, r.currency)}</td>
                       <td>{formatDate(r.confirmed_at ?? r.created_at, ctx.tenant.time_zone)}</td>
                       <td>{r.source === "billzilla" ? "BillZilla" : r.source === "csv" ? "Import" : "Drivo"}</td>
-                      <td>{located(r) ? <span>{r.customer?.location?.name}</span> : <Link href="/locations" className="no-underline"><Badge tone="amber" icon>Needs a pin</Badge></Link>}</td>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          {located(r) ? <span>{r.customer?.location?.name}</span> : <Badge tone="amber" icon>Needs a pin</Badge>}
+                          {PLACE_CHANGEABLE.includes(r.delivery_status) && <Link href={`/orders/${r.id}/place`} className="link text-sm" aria-label={`Change the place for ${r.reference}`}>Change</Link>}
+                        </div>
+                      </td>
                       <td>{r.invoice_pdf_path ? <a href={`/orders/${r.id}/invoice`} target="_blank" rel="noopener" className="link">PDF</a> : <span className="text-muted">None</span>}</td>
                       <td><StatusBadge status={r.delivery_status} /></td>
                     </tr>

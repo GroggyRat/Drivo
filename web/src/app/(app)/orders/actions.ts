@@ -7,6 +7,7 @@ import { getBillzillaClient } from "@/lib/integrations/billzilla";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireManager } from "@/lib/tenant";
 import { parseCsv } from "@/lib/csv";
+import { PLACE_CHANGEABLE } from "./place";
 
 /** "Sync from BillZilla": pull confirmed invoices and store them like webhooks do. */
 export async function syncFromBillzilla() {
@@ -181,4 +182,79 @@ export async function addDelivery(formData: FormData) {
   revalidatePath("/plan");
   revalidatePath("/locations");
   redirect(`/orders?notice=added${approved ? "" : "&pending=1"}`);
+}
+
+const placeSchema = z.object({
+  locationId: z.string().min(1),
+  placeName: z.string().trim().max(200).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lon: z.coerce.number().min(-180).max(180).optional(),
+  directions: z.string().trim().max(2000).optional(),
+});
+
+/**
+ * Change where an invoice is delivered. Orders added in Drivo or imported move
+ * on their own: they are given a customer of the same name at the new place.
+ * BillZilla invoices cannot be edited in Drivo, so their customer is moved,
+ * which moves that customer's other open invoices too.
+ */
+export async function changeDeliveryPlace(orderId: string, formData: FormData) {
+  const ctx = await requireManager();
+  const back = `/orders/${orderId}/place`;
+  const fail = (message: string): never => redirect(`${back}?error=${encodeURIComponent(message)}`);
+  const parsed = placeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) fail(parsed.error!.issues[0].message);
+  const d = parsed.data!;
+
+  const { data: order } = await ctx.supabase.from("orders")
+    .select("id, source, customer_name, delivery_status, customer:customers(id, name, location_id)")
+    .eq("id", orderId).eq("tenant_id", ctx.tenant.id).maybeSingle();
+  if (!order) fail("That invoice is not in Drivo");
+  const o = order as unknown as { id: string; source: string; customer_name: string; delivery_status: string; customer: { id: string; name: string; location_id: string | null } };
+  if (!PLACE_CHANGEABLE.includes(o.delivery_status)) fail("This invoice is on a route. Take it off the route first, then change the place.");
+
+  let locationId = d.locationId;
+  let approved = true;
+  if (locationId === "new") {
+    if (!d.placeName || d.lat === undefined || d.lon === undefined) fail("Name the shop and click the map to place the pin");
+    const { data, error } = await ctx.supabase.rpc("submit_location", {
+      p_tenant_id: ctx.tenant.id, p_name: d.placeName, p_type: "shop", p_lon: d.lon, p_lat: d.lat, p_accuracy_m: null,
+      p_landmark_directions: d.directions || null, p_photo_path: null, p_address: null, p_expires_at: null,
+    });
+    if (error) fail(error.message);
+    const r = data as { id: string; status: string };
+    locationId = r.id;
+    approved = r.status === "approved";
+  } else {
+    const { data: loc } = await ctx.supabase.from("locations").select("id").eq("id", locationId).eq("tenant_id", ctx.tenant.id).eq("status", "approved").maybeSingle();
+    if (!loc) fail("Choose the place again");
+  }
+
+  if (o.source === "billzilla") {
+    if (!approved) {
+      revalidatePath("/locations");
+      redirect(`/orders?tab=needs-pin&notice=place-pending&customer=${encodeURIComponent(o.customer.name)}`);
+    }
+    const { error } = await ctx.supabase.from("customers").update({ location_id: locationId }).eq("id", o.customer.id).eq("tenant_id", ctx.tenant.id);
+    if (error) fail("Could not change the place");
+  } else if (o.customer.location_id !== locationId) {
+    // An existing customer of this name at the new place, or a new one.
+    const name = o.customer_name;
+    const { data: existing } = await ctx.supabase.from("customers").select("id, location_id")
+      .eq("tenant_id", ctx.tenant.id).ilike("name", name.replace(/[%_]/g, "\\$&")).eq("active", true);
+    let customerId = approved ? ((existing ?? []).find((c) => c.location_id === locationId)?.id as string | undefined) : undefined;
+    if (!customerId) {
+      const { data: created, error } = await ctx.supabase.from("customers")
+        .insert({ tenant_id: ctx.tenant.id, source: "manual", name, location_id: approved ? locationId : null })
+        .select("id").single();
+      if (error || !created) fail("Could not change the place");
+      customerId = created!.id;
+    }
+    const { error } = await ctx.supabase.from("orders").update({ customer_id: customerId }).eq("id", o.id).eq("tenant_id", ctx.tenant.id);
+    if (error) fail("Could not change the place");
+  }
+  revalidatePath("/orders");
+  revalidatePath("/plan");
+  revalidatePath("/locations");
+  redirect(`/orders?tab=all&notice=place-changed${approved ? "" : "&pending=1"}`);
 }

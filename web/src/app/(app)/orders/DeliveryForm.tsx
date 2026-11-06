@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Field } from "@/components/ui";
 import { getBrowserClient } from "@/lib/supabase/client";
-import { LocationPicker } from "../locations/LocationPicker";
 import { addDelivery } from "./actions";
+import { PlaceChooser, type Place } from "./PlaceChooser";
 
-type Place = { id: string; name: string; lon: number; lat: number };
 const MAX_PDF = 10 * 1024 * 1024;
 
 function Submit({ uploading }: { uploading: boolean }) {
@@ -49,26 +48,7 @@ export function DeliveryForm({ tenantId, places, customers }: { tenantId: string
 
   return (
     <form action={submit} className="space-y-4">
-      <Field label="Where to deliver" htmlFor="locationId" hint="Choose a shop Drivo knows, or drop a pin for a new one.">
-        <select
-          id="locationId" name="locationId" className="input" value={place}
-          onChange={(e) => { setPlace(e.target.value); setPlaceName(places.find((p) => p.id === e.target.value)?.name ?? ""); }}
-        >
-          {places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          <option value="new">A new place: drop a pin</option>
-        </select>
-      </Field>
-      {place === "new" && (
-        <div className="space-y-3 rounded-[var(--radius-card)] border border-line p-3">
-          <Field label="Shop name" htmlFor="placeName">
-            <input id="placeName" name="placeName" className="input" required value={placeName} onChange={(e) => setPlaceName(e.target.value)} />
-          </Field>
-          <LocationPicker height={260} others={places.map((p) => ({ id: p.id, position: [p.lon, p.lat] as [number, number], kind: "shop" as const, label: p.name }))} />
-          <Field label="Directions for the driver" htmlFor="directions">
-            <input id="directions" name="directions" className="input" placeholder="For example: blue shop opposite the school" />
-          </Field>
-        </div>
-      )}
+      <PlaceChooser places={places} place={place} setPlace={setPlace} placeName={placeName} setPlaceName={setPlaceName} />
       <Field label="Customer" htmlFor="customer" hint="Leave as the shop name if the invoice is to the shop.">
         <input id="customer" name="customer" className="input" list="customer-names" placeholder={placeName || "Customer name"} />
         <datalist id="customer-names">{customers.map((c) => <option key={c} value={c} />)}</datalist>
