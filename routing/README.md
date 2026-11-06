@@ -1,5 +1,15 @@
 # Drivo routing server
 
+> **Routing now runs inside the web app on Vercel by default**, on Drivo's own Fiji road graph (`web/data/fiji-roads.bin`, router in `web/src/lib/routing/graph.ts`). It plans the three options, orders the stops, draws the road line and gives the driver app turn-by-turn directions. Nothing in this folder needs to be hosted for that.
+>
+> Rebuild the graph when the map data changes (monthly is plenty), then commit the new file:
+>
+> ```bash
+> python3 scripts/routing/build-graph.py fiji-latest.osm.pbf web/data/fiji-roads.bin
+> ```
+>
+> The Valhalla and VROOM server below is optional. Set `ROUTING_API_URL` and `ROUTING_API_KEY` in the web app to use it instead, for example for truck restrictions or map matching in the nightly job.
+
 Valhalla and VROOM on a small Linux VPS, with Docker Compose, behind a thin authenticated API. Everything here is open source: no Google Maps and no paid map APIs.
 
 | Service | What it does |

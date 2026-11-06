@@ -7,6 +7,7 @@ import { Card, Notice, PageHeader, StatusBadge, TableWrap } from "@/components/u
 import { formatDate, formatDistance, formatDuration, formatLitres, formatTime } from "@/lib/format";
 import { loadPlanInputs, toPlanRequest, withFuel } from "@/lib/planning";
 import { getRoutingProvider } from "@/lib/routing";
+import { EstimateRoutingProvider } from "@/lib/routing/estimate";
 import type { Objective } from "@/lib/routing/types";
 import { requireManager } from "@/lib/tenant";
 import { loadPlanningLists } from "../../plan/data";
@@ -70,7 +71,11 @@ export default async function RoutePage({ params, searchParams }: { params: Prom
       vehicleId: route.vehicle_id,
     });
     const departure = route.departure_at ?? new Date(`${route.route_date}T08:00:00+12:00`).toISOString();
-    const option = withFuel(await getRoutingProvider().sequence(toPlanRequest(inputs, departure, keys), route.optimise_for as Objective), inputs);
+    const planRequest = toPlanRequest(inputs, departure, keys);
+    // A stop the road router cannot reach still shows, with straight-line estimates.
+    const sequenced = await getRoutingProvider().sequence(planRequest, route.optimise_for as Objective)
+      .catch(() => new EstimateRoutingProvider().sequence(planRequest, route.optimise_for as Objective));
+    const option = withFuel(sequenced, inputs);
     return (
       <>
         {header}

@@ -1,8 +1,9 @@
 import type { LngLat } from "@/lib/geo";
 
-// RoutingProvider: the only way the app asks for routes. The production
-// implementation calls our routing server (Valhalla and VROOM, routing/);
-// the estimate implementation is used when no server is configured.
+// RoutingProvider: the only way the app asks for routes. Drivo routes on its
+// own Fiji road graph inside the web app (roadGraph.ts); a separate routing
+// server (Valhalla and VROOM, routing/) is used instead when configured, and
+// straight-line estimates only when neither is available.
 
 export type Objective = "lowest_fuel" | "fastest" | "shortest";
 export const OBJECTIVES: Objective[] = ["lowest_fuel", "fastest", "shortest"];
@@ -42,7 +43,7 @@ export type RouteOption = {
   etas: string[];
   returnAt: string;
   geometry: LngLat[];
-  source: "routing_server" | "estimate";
+  source: "routing_server" | "road_graph" | "estimate";
 };
 
 export interface RoutingProvider {

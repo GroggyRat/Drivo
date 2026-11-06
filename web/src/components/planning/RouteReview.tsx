@@ -29,7 +29,7 @@ export type OptionClient = {
   etas: string[];
   returnAt: string;
   geometry: LngLat[];
-  source: "routing_server" | "estimate";
+  source: "routing_server" | "road_graph" | "estimate";
   fuel: { litres: number; cost: number | null; formula: string; currency: string } | null;
 };
 
