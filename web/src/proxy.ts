@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Pages and endpoints that do not need a signed-in person. Integration
 // webhooks check their own signatures; the cron endpoint checks its secret.
-const PUBLIC_PREFIXES = ["/sign-in", "/auth/", "/basemap/", "/api/integrations/"];
+const PUBLIC_PREFIXES = ["/sign-in", "/auth/", "/basemap/", "/api/integrations/", "/api/navigation/"];
 
 const isPublic = (pathname: string) => PUBLIC_PREFIXES.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
 

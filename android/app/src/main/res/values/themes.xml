@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Drivo" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0B1F44</item>
+        <item name="android:windowBackground">#F7F8FA</item>
+    </style>
+</resources>
