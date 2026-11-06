@@ -1,0 +1,10 @@
+# Local development: publish Valhalla and VROOM on localhost and skip Caddy.
+# Run the API with Node (api/: npm run build && npm start) against them.
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d valhalla vroom
+services:
+  valhalla:
+    ports:
+      - "127.0.0.1:8002:8002"
+  vroom:
+    ports:
+      - "127.0.0.1:3010:3000"

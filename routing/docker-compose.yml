@@ -8,7 +8,7 @@
 
 services:
   valhalla:
-    image: ghcr.io/valhalla/valhalla-scripted:3.5.1
+    image: ghcr.io/valhalla/valhalla-scripted:3.9.1
     restart: unless-stopped
     volumes:
       - ./data/valhalla:/custom_files

@@ -52,6 +52,58 @@ const bearing = (a, b) => {
 };
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
+// Road paths from a local Valhalla (routing/docker-compose.local.yml). When
+// Valhalla is not running, drivers move in straight lines instead.
+const VALHALLA = process.env.VALHALLA_URL ?? "http://127.0.0.1:8002";
+const decode6 = (str) => {
+  const out = [];
+  let i = 0, lat = 0, lon = 0;
+  while (i < str.length) {
+    for (const k of [0, 1]) {
+      let r = 0, sh = 0, b;
+      do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20);
+      const d = r & 1 ? ~(r >> 1) : r >> 1;
+      if (k === 0) lat += d; else lon += d;
+    }
+    out.push([lon / 1e6, lat / 1e6]);
+  }
+  return out;
+};
+let valhallaUp = null;
+async function roadPath(from, to) {
+  if (valhallaUp !== false) {
+    try {
+      const res = await fetch(`${VALHALLA}/route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locations: [{ lon: from[0], lat: from[1] }, { lon: to[0], lat: to[1] }], costing: "truck", directions_type: "none" }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) {
+        valhallaUp = true;
+        const shape = decode6((await res.json()).trip.legs[0].shape);
+        return [from, ...shape, to];
+      }
+    } catch {
+      valhallaUp = false;
+      console.log("Valhalla not reachable: drivers move in straight lines.");
+    }
+  }
+  return [from, to];
+}
+const pathLength = (path) => path.slice(1).reduce((s, p, i) => s + haversine(path[i], p), 0);
+/** Position and heading after `metres` along a path. */
+function along(path, metres) {
+  let left = metres;
+  for (let i = 1; i < path.length; i++) {
+    const seg = haversine(path[i - 1], path[i]);
+    if (left <= seg && seg > 0) return { pos: lerp(path[i - 1], path[i], left / seg), heading: Math.round(bearing(path[i - 1], path[i]) % 360) };
+    left -= seg;
+  }
+  const n = path.length;
+  return { pos: path[n - 1], heading: n > 1 ? Math.round(bearing(path[n - 2], path[n - 1]) % 360) : 0 };
+}
+
 async function signIn(email) {
   const client = createClient(URL, ANON, { auth: { persistSession: false } });
   const { data, error } = await client.auth.signInWithPassword({ email, password: PASSWORD });
@@ -172,53 +224,58 @@ async function complete(d, stop, at, outcome = "delivered") {
 }
 
 /** Drive one leg from the current position to `to`, recording points from time t. */
-function driveLeg(d, to, t, speeding) {
-  const from = d.position;
-  const metres = haversine(from, to) * 1.2;
+/** Drive along a road path from time t, recording a point every few seconds; stop at `fraction` of it. */
+function driveLeg(d, path, t, speeding, fraction = 1) {
+  const metres = pathLength(path) * fraction;
   let travelled = 0;
   let i = 0;
   while (travelled < metres) {
-    // Accelerate away, cruise, slow down; one stretch over the limit if asked.
+    // Pull away slowly, cruise, slow down at the end; one stretch over the limit if asked.
     const progress = travelled / metres;
     let kmh = KMH + 6 * Math.sin(i / 3);
     if (progress < 0.08 || progress > 0.92) kmh = 18;
     if (speeding && progress > 0.2 && progress < 0.7) kmh = 66 + (i % 3);
     const mps = kmh / 3.6;
-    travelled += mps * STEP_S;
+    travelled = Math.min(metres, travelled + mps * STEP_S);
     t += STEP_S * 1000;
-    const pos = lerp(from, to, Math.min(1, travelled / metres));
-    d.buffer.push([Math.round(t), +pos[0].toFixed(6), +pos[1].toFixed(6), 5 + (i % 4), +mps.toFixed(2), Math.round(bearing(from, to) % 360)]);
+    const { pos, heading } = along(path, travelled);
+    d.buffer.push([Math.round(t), +pos[0].toFixed(6), +pos[1].toFixed(6), 5 + (i % 4), +mps.toFixed(2), heading]);
     i++;
   }
-  d.position = to;
+  d.position = along(path, metres).pos;
   return t;
 }
 
 async function backfill(d, endAt) {
-  // Work out how long the completed legs take, so the morning ends now.
-  let t = 0;
-  const probe = { ...d, buffer: [], position: d.depot };
-  for (let k = 0; k < d.completeFirst; k++) {
-    t = driveLeg(probe, [d.stops[k].location.lon, d.stops[k].location.lat], t, false) + 7 * 60_000;
+  // Road paths for the legs already driven this morning, then work out how
+  // long they took so the morning ends now.
+  const legs = [];
+  let from = d.depot;
+  for (let k = 0; k <= d.completeFirst; k++) {
+    const to = [d.stops[k].location.lon, d.stops[k].location.lat];
+    legs.push(await roadPath(from, to));
+    from = to;
   }
-  const partial = haversine(probe.position, [d.stops[d.completeFirst].location.lon, d.stops[d.completeFirst].location.lat]) * 1.2 * 0.4;
-  t += (partial / (KMH / 3.6)) * 1000;
+  let t = 0;
+  const probe = { buffer: [], position: d.depot };
+  for (let k = 0; k < d.completeFirst; k++) t = driveLeg(probe, legs[k], t, false) + 6 * 60_000;
+  t = driveLeg(probe, legs[d.completeFirst], t, false, 0.4);
   let clock = endAt - t;
 
   d.position = d.depot;
   for (let k = 0; k < d.completeFirst; k++) {
     const stop = d.stops[k];
-    clock = driveLeg(d, [stop.location.lon, stop.location.lat], clock, d.speedingLeg === k);
+    clock = driveLeg(d, legs[k], clock, d.speedingLeg === k);
     // Park for the delivery: a few stationary points.
     for (let s = 0; s < 6; s++) d.buffer.push([(clock += 60_000), d.position[0], d.position[1], 4, 0, 0]);
     await uploadInChunks(d);
     await complete(d, stop, clock, k === 1 ? "partially_delivered" : "delivered");
   }
   d.legIndex = d.completeFirst;
-  // Part of the way to the next stop.
-  const next = d.stops[d.legIndex];
-  const target = lerp(d.position, [next.location.lon, next.location.lat], 0.4);
-  driveLeg(d, target, clock, false);
+  // Part of the way to the next stop, then carry on live from there.
+  driveLeg(d, legs[d.completeFirst], clock, false, 0.4);
+  d.path = legs[d.completeFirst];
+  d.along = pathLength(d.path) * 0.4;
   await uploadInChunks(d);
 }
 
@@ -235,29 +292,46 @@ async function tick(d) {
   const next = d.stops[d.legIndex];
   if (!next) return;
   const to = [next.location.lon, next.location.lat];
-  const remaining = haversine(d.position, to);
+  if (!d.path) {
+    d.path = await roadPath(d.position, to);
+    d.along = 0;
+  }
   const mps = (KMH + 5 * Math.sin(Date.now() / 20000)) / 3.6;
-  const step = mps * 3; // three seconds of driving
+  d.along += mps * 3; // three seconds of driving
   const now = Date.now();
-  if (remaining <= step) {
+  if (d.along >= pathLength(d.path)) {
     d.position = to;
+    d.path = null;
     d.buffer.push([now, to[0], to[1], 5, 0, 0]);
     await uploadBatch(d);
     await complete(d, next, now);
     d.legIndex++;
     return;
   }
-  d.position = lerp(d.position, to, step / remaining);
-  const heading = Math.round(bearing(d.position, to) % 360);
-  d.buffer.push([now, +d.position[0].toFixed(6), +d.position[1].toFixed(6), 5, +mps.toFixed(2), heading]);
+  const { pos, heading } = along(d.path, d.along);
+  d.position = pos;
+  d.buffer.push([now, +pos[0].toFixed(6), +pos[1].toFixed(6), 5, +mps.toFixed(2), heading]);
   await d.channel.send({
     type: "broadcast",
     event: "position",
-    payload: { driver_id: d.userId, lon: d.position[0], lat: d.position[1], speed_kmh: Math.round(mps * 3.6), heading, at: new Date(now).toISOString() },
+    payload: { driver_id: d.userId, lon: pos[0], lat: pos[1], speed_kmh: Math.round(mps * 3.6), heading, at: new Date(now).toISOString() },
   });
 }
 
+/** As the dispatcher: give a route its road line (the planned geometry). */
+async function setRoadGeometry(routeId) {
+  const { client } = await signIn("dispatch@nadera.test");
+  const route = await client.from("routes").select("depot:depots(lon, lat), route_stops(sequence, location:locations(lon, lat))").eq("id", routeId).single().then(must("route"));
+  const points = [[route.depot.lon, route.depot.lat], ...route.route_stops.sort((a, b) => a.sequence - b.sequence).map((s) => [s.location.lon, s.location.lat]), [route.depot.lon, route.depot.lat]];
+  const line = [];
+  for (let i = 1; i < points.length; i++) line.push(...(await roadPath(points[i - 1], points[i])).slice(i === 1 ? 0 : 1));
+  const wkt = `SRID=4326;LINESTRING(${line.map((p) => `${p[0]} ${p[1]}`).join(",")})`;
+  await client.from("routes").update({ geometry: wkt, planned_distance_m: Math.round(pathLength(line)) }).eq("id", routeId).then(must("route geometry"));
+}
+
 const vikashRoute = await ensureVikashRoute();
+await setRoadGeometry("60000000-0000-4000-8000-000000000001");
+await setRoadGeometry(vikashRoute);
 const drivers = [
   await makeDriver("driver1@nadera.test", "60000000-0000-4000-8000-000000000001", { completeFirst: 2, speedingLeg: 1 }),
   await makeDriver("driver3@nadera.test", vikashRoute, { completeFirst: 1, speedingLeg: -1 }),
