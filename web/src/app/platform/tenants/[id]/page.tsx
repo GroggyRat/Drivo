@@ -51,7 +51,7 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
         ))}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         <Card title="Add an Owner or Admin">
           <form action={addPerson} className="space-y-3">
             <input type="hidden" name="tenant_id" value={t.id} />

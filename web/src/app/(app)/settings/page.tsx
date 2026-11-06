@@ -54,7 +54,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       />
 
       {tab === "people" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px] [&>*]:min-w-0">
           <Card bodyClassName="p-0">
             <TableWrap>
               <table className="data-table">
@@ -121,7 +121,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       )}
 
       {tab === "vehicles" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px] [&>*]:min-w-0">
           <Card bodyClassName="p-0">
             <TableWrap>
               <table className="data-table">
@@ -166,7 +166,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       )}
 
       {tab === "depots" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_380px] [&>*]:min-w-0">
           <Card bodyClassName="p-0">
             <TableWrap>
               <table className="data-table">
@@ -204,7 +204,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       )}
 
       {tab === "speed" && (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
           <Card title="Speed limits and alerts">
             <form action={saveSpeedSettings} className="space-y-4">
               <fieldset disabled={readOnly} className="space-y-4">
@@ -253,7 +253,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       )}
 
       {tab === "integrations" && (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
           <Card title="BillZilla">
             <p>{ctx.tenant.billzilla_enabled ? <Badge tone="green" icon>Connected</Badge> : <Badge tone="grey">Not connected</Badge>}</p>
             <p className="mt-2 text-sm text-muted">Confirmed invoices arrive in Ready for delivery. Delivery results, received by and proof links go back to the invoice. KaiTech connects a company on request.</p>

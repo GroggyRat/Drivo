@@ -36,7 +36,8 @@ function zonedIso(date: string, time: string, timeZone: string) {
   return new Date(guess.getTime() - (local.getTime() - utc.getTime())).toISOString();
 }
 
-export function PlanFlow({ orders, depots, vehicles, drivers, today, tomorrow, timeZone }: {
+export function PlanFlow({ orders, depots, vehicles, drivers, today, tomorrow, timeZone, billzilla = false }: {
+  billzilla?: boolean;
   orders: PlanOrder[];
   depots: { id: string; name: string; position: [number, number] }[];
   vehicles: { id: string; plate: string; model: string | null; fuel: number; capacity: number | null }[];
@@ -113,10 +114,10 @@ export function PlanFlow({ orders, depots, vehicles, drivers, today, tomorrow, t
       {error && <Notice tone="red">{error}</Notice>}
 
       {step === "select" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_340px] [&>*]:min-w-0 [&>*]:min-w-0">
           <Card
             title="Invoices ready for delivery"
-            actions={<input aria-label="Search invoices" placeholder="Search customer or invoice" className="input min-h-9 w-56" value={filter} onChange={(e) => setFilter(e.target.value)} />}
+            actions={<input aria-label="Search invoices" placeholder="Search customer or invoice" className="input min-h-9 w-full sm:w-56" value={filter} onChange={(e) => setFilter(e.target.value)} />}
             bodyClassName="p-0"
           >
             {needsPin > 0 && (
@@ -126,7 +127,14 @@ export function PlanFlow({ orders, depots, vehicles, drivers, today, tomorrow, t
               </div>
             )}
             {visible.length === 0 ? (
-              <EmptyState title="No invoices ready for delivery">Confirmed invoices from BillZilla, and orders added in Drivo, appear here.</EmptyState>
+              <EmptyState title="No invoices ready for delivery">
+                {billzilla
+                  ? "Confirmed invoices from BillZilla, and deliveries added in Drivo, appear here."
+                  : "Add each delivery with its place and invoice PDF, then plan the route here."}
+                <div className="mt-4">
+                  <Link href="/orders?tab=add" className={billzilla ? "btn-secondary" : "btn-primary"}>Add delivery</Link>
+                </div>
+              </EmptyState>
             ) : (
               <TableWrap>
                 <table className="data-table">
@@ -175,7 +183,7 @@ export function PlanFlow({ orders, depots, vehicles, drivers, today, tomorrow, t
 
           <Card title="Route settings">
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
                 <Field label="Date" htmlFor="date">
                   <input id="date" type="date" className="input" min={today} value={settings.date} onChange={(e) => setSettings({ ...settings, date: e.target.value })} />
                 </Field>

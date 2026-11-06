@@ -107,7 +107,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: S
         <button className="btn-secondary" type="submit">Show</button>
       </form>
 
-      <div className={`grid gap-5 ${selected ? "xl:grid-cols-[1fr_460px]" : ""}`}>
+      <div className={`grid gap-5 [&>*]:min-w-0 ${selected ? "xl:grid-cols-[1fr_460px]" : ""}`}>
         <Card bodyClassName="p-0">
           {rows.length === 0 ? <EmptyState title="No deliveries match" /> : (
             <TableWrap>

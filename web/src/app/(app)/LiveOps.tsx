@@ -84,7 +84,7 @@ export function LiveOps({ initial, tenantId, timeZone }: { initial: LiveSnapshot
         <StatCard label="Speed alerts" value={snap.summary.openAlerts} detail="Not yet acknowledged" tone={snap.summary.openAlerts ? "red" : undefined} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_360px] [&>*]:min-w-0">
         <Card title="Live map" bodyClassName="p-0" actions={<span className="text-xs text-muted">Updated {formatTime(snap.generatedAt, timeZone)}</span>}>
           <MapView
             markers={markers}

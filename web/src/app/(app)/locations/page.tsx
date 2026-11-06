@@ -76,7 +76,7 @@ export default async function LocationsPage({ searchParams }: { searchParams: SP
         reviewItems.length === 0 ? (
           <Card><EmptyState title="No pins waiting for review">When a driver drops a pin for a new shop, it appears here.</EmptyState></Card>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+          <div className="grid gap-5 xl:grid-cols-[420px_1fr] [&>*]:min-w-0">
             <Card title="On the map" bodyClassName="p-0">
               <LocationsMap locations={[...pending, ...all.filter((l) => l.status === "approved" && reviewItems.some((r) => r.nearby.some((n) => n.id === l.id)))]} height={520} />
             </Card>
@@ -133,7 +133,7 @@ export default async function LocationsPage({ searchParams }: { searchParams: SP
 
       {tab === "all" && (
         <div className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+          <div className="grid gap-5 xl:grid-cols-[1fr_380px] [&>*]:min-w-0">
             <Card title="Map" bodyClassName="p-0"><LocationsMap locations={listed} height={460} /></Card>
             {ctx.isAdmin && (
               <Card title="Add a location">
@@ -152,12 +152,12 @@ export default async function LocationsPage({ searchParams }: { searchParams: SP
           <Card
             title={`${listed.length} locations`}
             actions={
-              <form className="flex gap-2">
+              <form className="flex w-full flex-wrap gap-2 sm:w-auto">
                 <input type="hidden" name="tab" value="all" />
                 <label htmlFor="q" className="sr-only">Search</label>
-                <input id="q" name="q" defaultValue={sp.q} placeholder="Search" className="input min-h-9 w-40" />
+                <input id="q" name="q" defaultValue={sp.q} placeholder="Search" className="input min-h-9 w-full min-w-0 flex-1 sm:w-40 sm:flex-none" />
                 <label htmlFor="type" className="sr-only">Type</label>
-                <select id="type" name="type" defaultValue={typeFilter} className="input min-h-9 w-32">
+                <select id="type" name="type" defaultValue={typeFilter} className="input min-h-9 w-32 flex-none">
                   <option value="">All types</option><option value="shop">Shops</option><option value="depot">Depots</option><option value="fuel">Fuel</option><option value="hazard">Hazards</option>
                 </select>
                 <button className="btn-secondary btn-sm" type="submit">Filter</button>
@@ -187,7 +187,7 @@ export default async function LocationsPage({ searchParams }: { searchParams: SP
       )}
 
       {tab === "hazards" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_380px] [&>*]:min-w-0">
           <Card title="Hazards" bodyClassName="p-0">
             {hazards.length === 0 ? <EmptyState title="No hazards on the map" /> : (
               <TableWrap>

@@ -25,7 +25,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
       <PageHeader title={loc.name} description={<span className="inline-flex items-center gap-2"><StatusBadge status={loc.status} /> Added {formatDateTime(loc.created_at, ctx.tenant.time_zone)}</span>} actions={<Link href="/locations?tab=all" className="btn-secondary">All locations</Link>} />
       {sp.notice && <div className="mb-4"><Notice tone="green">{sp.notice === "saved" ? "Changes saved." : sp.notice === "linked" ? "Customer linked." : "Customer unlinked."}</Notice></div>}
       {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}
-      <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_400px] [&>*]:min-w-0">
         <Card title="Details">
           {ctx.isAdmin ? (
             <form action={updateLocation} className="space-y-4">

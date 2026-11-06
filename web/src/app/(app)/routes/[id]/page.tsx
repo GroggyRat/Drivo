@@ -106,7 +106,7 @@ export default async function RoutePage({ params, searchParams }: { params: Prom
           <div key={k} className="card p-3"><p className="text-xs text-muted">{k}</p><p className="font-semibold">{v}</p></div>
         ))}
       </div>
-      <div className="grid gap-5 xl:grid-cols-[1fr_480px]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_480px] [&>*]:min-w-0">
         <Card title="Map" bodyClassName="p-0">
           <RouteMap
             depot={{ name: route.depot?.name ?? "Depot", position: [route.depot?.lon, route.depot?.lat] }}

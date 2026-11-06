@@ -51,9 +51,9 @@ export function Card({ title, actions, children, className = "", bodyClassName =
   bodyClassName?: string;
 }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`card min-w-0 ${className}`}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
           {title && <h2 className="text-base font-semibold">{title}</h2>}
           {actions}
         </header>
@@ -117,5 +117,5 @@ export function Field({ label, htmlFor, hint, children }: { label: string; htmlF
 }
 
 export function TableWrap({ children }: { children: ReactNode }) {
-  return <div className="overflow-x-auto">{children}</div>;
+  return <div className="relative overflow-x-auto">{children}</div>;
 }

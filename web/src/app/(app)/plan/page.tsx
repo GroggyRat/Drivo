@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { todayIn } from "@/lib/format";
 import { requireManager } from "@/lib/tenant";
@@ -36,7 +37,11 @@ export default async function PlanPage() {
 
   return (
     <>
-      <PageHeader title="Plan route" description="Choose invoices, compare three route options, then assign a driver and vehicle." />
+      <PageHeader
+        title="Plan route"
+        description="Choose invoices, compare three route options, then assign a driver and vehicle."
+        actions={!ctx.tenant.billzilla_enabled && <Link href="/orders?tab=add" className="btn-secondary">Add delivery</Link>}
+      />
       <PlanFlow
         orders={planOrders}
         depots={lists.depots}
@@ -45,6 +50,7 @@ export default async function PlanPage() {
         tomorrow={todayIn(ctx.tenant.time_zone, 1)}
         today={todayIn(ctx.tenant.time_zone)}
         timeZone={ctx.tenant.time_zone}
+        billzilla={ctx.tenant.billzilla_enabled}
       />
     </>
   );
