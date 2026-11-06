@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LogoMark } from "@/components/Logo";
 import { requirePlatformAdmin } from "@/lib/tenant";
 
 export const metadata: Metadata = { title: { default: "Platform console", template: "%s | Drivo platform" } };
@@ -10,9 +11,12 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     <div className="min-h-screen">
       <header className="bg-navy text-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div>
+          <div className="flex items-center gap-3">
+            <LogoMark size={36} />
+            <div>
             <p className="text-xs tracking-wide text-[#c7d2e4] uppercase">KaiTech</p>
             <Link href="/platform" className="text-lg font-semibold">Drivo platform console</Link>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[#d6deeb]">{ctx.platformName ?? "Platform owner"}</span>

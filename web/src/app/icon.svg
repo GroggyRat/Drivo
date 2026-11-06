@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Drivo mark for small sizes (favicon, next to the name): the icon without the streets. -->
+  <rect width="512" height="512" rx="112" fill="#0B1F44"/>
+  <g transform="translate(-6 -18) scale(1.04)"><path d="M124 390 H300 C334 390 352 372 352 338 V318" fill="none" stroke="#2563EB" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/><circle cx="124" cy="390" r="38" fill="#2563EB"/><circle cx="124" cy="390" r="15" fill="#0B1F44"/><path d="M352 282 C326 252 286 226 286 186 A66 66 0 0 1 418 186 C418 226 378 252 352 282 Z" fill="#fff"/><circle cx="352" cy="186" r="24" fill="#2563EB"/></g>
+</svg>

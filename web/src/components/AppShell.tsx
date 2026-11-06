@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogoMark } from "./Logo";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconInvoice, IconLedger, IconLive, IconPin, IconPlan, IconRoute, IconSettings, IconSignOut } from "./icons";
@@ -32,7 +33,7 @@ export function AppShell({ tenantName, userName, roleLabel, tenantSwitcher, plat
         <div className="flex items-center justify-between gap-3 px-4 py-3 lg:block lg:px-5 lg:py-5">
           <div>
             <p className="text-lg font-semibold tracking-tight">{tenantName}</p>
-            <p className="text-xs text-[#c7d2e4]">Drivo</p>
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-[#c7d2e4]"><LogoMark size={16} />Drivo</p>
           </div>
           <div className="lg:hidden">
             <form action="/auth/sign-out" method="post">

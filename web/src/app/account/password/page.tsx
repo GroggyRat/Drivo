@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PasswordForm } from "./PasswordForm";
@@ -16,8 +17,8 @@ export default async function PasswordPage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-6">
-          <p className="text-sm font-semibold tracking-wide text-navy uppercase">Drivo</p>
-          <h1 className="mt-1 text-2xl font-semibold">Choose a password</h1>
+          <Logo size={36} />
+          <h1 className="mt-4 text-2xl font-semibold">Choose a password</h1>
           <p className="mt-1 text-muted">For {data.user.email}</p>
         </div>
         <div className="card p-5"><PasswordForm /></div>

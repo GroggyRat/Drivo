@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Drivo app icon: the route to a delivery on the street map. Navy #0B1F44, blue #2563EB. -->
+  <defs><clipPath id="r"><rect width="512" height="512" rx="112"/></clipPath></defs>
+  <g clip-path="url(#r)"><rect width="512" height="512" fill="#0B1F44"/><g stroke="#22396A" stroke-width="16"><path d="M-200 240 H712 M-200 96 H712 M238 -200 V712"/></g><g stroke="#2A4579" stroke-width="64"><path d="M-200 390 H712 M352 -200 V712"/></g></g>
+  <path d="M124 390 H300 C334 390 352 372 352 338 V318" fill="none" stroke="#2563EB" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><circle cx="124" cy="390" r="38" fill="#2563EB"/><circle cx="124" cy="390" r="15" fill="#0B1F44"/><path d="M352 282 C326 252 286 226 286 186 A66 66 0 0 1 418 186 C418 226 378 252 352 282 Z" fill="#fff"/><circle cx="352" cy="186" r="24" fill="#2563EB"/>
+</svg>

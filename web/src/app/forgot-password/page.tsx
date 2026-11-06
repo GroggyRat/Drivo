@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Logo } from "@/components/Logo";
 import Link from "next/link";
 import { ResetForm } from "./ResetForm";
 
@@ -10,8 +11,8 @@ export default async function ForgotPasswordPage({ searchParams }: { searchParam
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-6">
-          <p className="text-sm font-semibold tracking-wide text-navy uppercase">Drivo</p>
-          <h1 className="mt-1 text-2xl font-semibold">Reset your password</h1>
+          <Logo size={36} />
+          <h1 className="mt-4 text-2xl font-semibold">Reset your password</h1>
           <p className="mt-1 text-muted">We will email you a link to choose a new password.</p>
         </div>
         {error === "expired" && <p className="mb-4 rounded-[var(--radius-control)] bg-warn-bg px-3 py-2 text-sm text-warn">That link has expired or was already used. Ask for a new one.</p>}
