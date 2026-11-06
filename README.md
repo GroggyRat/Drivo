@@ -8,13 +8,25 @@ All maps, routing and navigation run on our own open-source stack: MapLibre, Val
 
 ## Repository
 
-| Folder | What it holds | Status |
-|---|---|---|
-| `supabase/` | Postgres and PostGIS schema, Row Level Security, functions, storage, seed data, and the database tests | Milestone 1 |
-| `routing/` | Docker Compose for Valhalla and VROOM with the Fiji OSM extract, the routing API, and the monthly rebuild | Milestone 2 |
-| `web/` | Admin web app (Next.js, Tailwind CSS, MapLibre GL JS), hosted on Vercel | Milestone 3 |
-| `android/` | Driver app (Kotlin, Jetpack Compose, MapLibre, Ferrostar) | Milestone 5 |
-| `docs/` | Architecture, data model, integrations, decisions | Ongoing |
+| Folder | What it holds |
+|---|---|
+| `supabase/` | Postgres and PostGIS schema, Row Level Security, functions, storage, seed data, and the database tests |
+| `web/` | Admin web app (Next.js, Tailwind CSS, MapLibre GL JS), hosted on Vercel |
+| `routing/` | Docker Compose for Valhalla and VROOM with the Fiji OSM extract, the routing API, and the monthly rebuild |
+| `android/` | Driver app (Kotlin, Jetpack Compose, MapLibre, Ferrostar) |
+| `jobs/` | Nightly job: GPS archive to R2, road matching, trips, road speeds |
+| `scripts/dev/` | Local preview and the driver simulator |
+| `docs/` | Architecture, data model, integrations, decisions |
+
+## Local preview
+
+Needs Docker and Node 22. Starts Supabase with the demo data, the admin app on http://localhost:3000, and a simulator that drives two Nadera drivers through their routes:
+
+```bash
+scripts/dev/preview.sh
+```
+
+Sign in as `admin@nadera.test` with the password `DrivoDemo2026`.
 
 ## Quick start (database)
 
@@ -51,12 +63,14 @@ The demo tenant is **Nadera Distributors**. Every demo account uses the password
 
 ## Milestones
 
-1. Repo structure, schema, RLS and tests, demo seed data. **Done.**
-2. Routing server: Valhalla and VROOM with the Fiji extract, API wrapper, rebuild script.
-3. Admin web: auth, layout, Locations, Vehicles, Settings.
-4. Plan route and Review route with fuel estimates.
-5. Driver app: sign in, Today's run, background tracking, offline queue, Realtime broadcast.
-6. Live operations dashboard with live vehicles and speed alerts.
-7. In-app navigation, arrival detection, proof of delivery, Drop a pin, Day ledger.
-8. BillZilla and KaiWorkforce integrations, single sign-on, Deliveries ledger, CSV export.
-9. Nightly trip compression, R2 archiving, historical speed aggregation, hardening.
+| # | Milestone | Status |
+|---|---|---|
+| 1 | Repo, schema, RLS and tests, demo seed | Built and tested |
+| 2 | Routing server: Valhalla, VROOM, API, monthly rebuild | API built and tested against mocks; not yet run with the live Fiji extract |
+| 3 | Admin web: auth, layout, Locations, Vehicles, Settings | Built |
+| 4 | Plan route and Review route with fuel estimates | Built; uses straight-line estimates until the routing server is connected |
+| 5 | Driver app: sign in, Today's run, tracking, offline queue, Realtime | Written; tracking rules tested in `:core`, app not yet compiled (needs the Android SDK) |
+| 6 | Live operations with live vehicles and speed alerts | Built |
+| 7 | Navigation, arrival, proof of delivery, Drop a pin, Day ledger | Written in the Android app, not yet compiled |
+| 8 | BillZilla and KaiWorkforce integrations, Deliveries ledger, CSV export | Webhooks, push-back outbox, sync and ledger built; single sign-on planned (see docs/decisions.md) |
+| 9 | Nightly trips, R2 archive, road speeds, hardening | Job built and unit tested; not yet run against R2 |
