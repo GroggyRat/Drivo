@@ -21,6 +21,8 @@ android {
         buildConfigField("String", "SUPABASE_KEY", "\"${project.findProperty("drivo.supabaseKey") ?: ""}\"")
         buildConfigField("String", "DRIVO_WEB_URL", "\"${project.findProperty("drivo.webUrl") ?: "http://10.0.2.2:3000"}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${project.findProperty("drivo.mapStyleUrl") ?: "https://tiles.openfreemap.org/styles/liberty"}\"")
+        // -Pdrivo.abis=arm64-v8a builds a smaller APK for modern phones only.
+        (project.findProperty("drivo.abis") as String?)?.let { ndk { abiFilters += it.split(",") } }
     }
 
     buildTypes {
