@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Drivo nightly job at 01:30 Fiji time
+
+[Timer]
+# 01:30 Fiji time (UTC+12) is 13:30 UTC the day before.
+OnCalendar=*-*-* 13:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Drivo nightly trip compression and GPS archive
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/drivo/jobs
+EnvironmentFile=/opt/drivo/jobs/.env
+ExecStart=/usr/bin/npm run nightly
