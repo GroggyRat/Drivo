@@ -1,0 +1,73 @@
+# XcodeGen spec for the Drivo iOS app. On a Mac:
+#   brew install xcodegen && xcodegen generate && open Drivo.xcodeproj
+name: Drivo
+options:
+  bundleIdPrefix: fj.kaitech
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+packages:
+  DrivoCore:
+    path: DrivoCore
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: 2.24.0
+  Ferrostar:
+    url: https://github.com/stadiamaps/ferrostar
+    exactVersion: 0.30.0
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: 6.10.0
+  MapLibreSwiftUI:
+    url: https://github.com/maplibre/swiftui-dsl
+    from: 0.3.0
+targets:
+  Drivo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Drivo
+    resources:
+      - path: Drivo/Resources/Fonts
+    dependencies:
+      - package: DrivoCore
+      - package: Supabase
+        product: Supabase
+      - package: Ferrostar
+        product: FerrostarCore
+      - package: Ferrostar
+        product: FerrostarSwiftUI
+      - package: Ferrostar
+        product: FerrostarMapLibreUI
+      - package: MapLibre
+        product: MapLibre
+      - package: MapLibreSwiftUI
+        product: MapLibreSwiftUI
+    info:
+      path: Drivo/Info.plist
+      properties:
+        CFBundleDisplayName: Drivo
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIAppFonts: [IBMPlexSans-Regular.ttf, IBMPlexSans-Medium.ttf, IBMPlexSans-SemiBold.ttf]
+        UIBackgroundModes: [location, fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [fj.kaitech.drivo.sync]
+        NSLocationWhenInUseUsageDescription: Drivo shows your position on the map, guides you to each shop and confirms arrival.
+        NSLocationAlwaysAndWhenInUseUsageDescription: While you are on shift, Drivo shares your location with your dispatcher for the live map, arrival at shops and speed alerts, including with the screen off. It stops when your shift ends.
+        NSCameraUsageDescription: Take photos of deliveries and of new shops.
+        DRIVO_SUPABASE_URL: $(DRIVO_SUPABASE_URL)
+        DRIVO_SUPABASE_KEY: $(DRIVO_SUPABASE_KEY)
+        DRIVO_WEB_URL: $(DRIVO_WEB_URL)
+        DRIVO_MAP_STYLE_URL: $(DRIVO_MAP_STYLE_URL)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [fj.kaitech.drivo]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fj.kaitech.drivo
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.10"
+        TARGETED_DEVICE_FAMILY: "1"

@@ -1,0 +1,28 @@
+name: iOS
+
+on:
+  push:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tracking rules (DrivoCore)
+        run: cd DrivoCore && swift test
+      - name: Generate the Xcode project
+        run: brew install xcodegen && xcodegen generate
+      - name: Build for the iOS Simulator
+        run: |
+          xcodebuild -project Drivo.xcodeproj -scheme Drivo \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO build | tail -200
+          exit ${PIPESTATUS[0]}

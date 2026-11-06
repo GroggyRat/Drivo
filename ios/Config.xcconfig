@@ -1,0 +1,8 @@
+// Drivo iOS settings. Put real values in Config.local.xcconfig (not
+// committed); the publishable key is safe in the app, the service key never is.
+// In xcconfig files, write // in URLs as /$()/.
+DRIVO_SUPABASE_URL = http:/$()/localhost:54321
+DRIVO_SUPABASE_KEY =
+DRIVO_WEB_URL = http:/$()/localhost:3000
+DRIVO_MAP_STYLE_URL = https:/$()/tiles.openfreemap.org/styles/liberty
+#include? "Config.local.xcconfig"

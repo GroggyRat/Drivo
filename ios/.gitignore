@@ -1,0 +1,6 @@
+Config.local.xcconfig
+Drivo.xcodeproj/
+*.xcuserstate
+DerivedData/
+.build/
+.swiftpm/
