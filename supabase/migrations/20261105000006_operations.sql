@@ -442,6 +442,46 @@ begin
 end;
 $$;
 
+-- A run of points over the limit. Uploads arrive every 30 to 60 seconds, so
+-- one stretch of speeding can span two uploads: a run that starts within 15
+-- seconds of the driver's last event ends extends that event instead of
+-- creating a second one. A new event needs the run to last the alert time.
+create or replace function app.record_speed_run(
+  p_tenant_id uuid, p_driver_id uuid, p_vehicle_id uuid, p_route_id uuid,
+  p_start timestamptz, p_end timestamptz, p_max numeric, p_limit integer, p_zone text,
+  p_point extensions.geography, p_after_s integer
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  select e.id into v_id
+  from public.speed_events e
+  where e.tenant_id = p_tenant_id and e.driver_id = p_driver_id
+    and e.started_at <= p_start
+    and e.started_at + make_interval(secs => e.duration_s) >= p_start - interval '15 seconds'
+  order by e.started_at desc
+  limit 1
+  for update;
+  if v_id is not null then
+    update public.speed_events e set
+      duration_s = greatest(e.duration_s, extract(epoch from p_end - e.started_at)::integer),
+      point = case when p_max > e.max_speed_kmh then p_point else e.point end,
+      max_speed_kmh = greatest(e.max_speed_kmh, p_max),
+      limit_kmh = least(e.limit_kmh, p_limit)
+    where e.id = v_id;
+  elsif extract(epoch from p_end - p_start) >= p_after_s then
+    insert into public.speed_events (tenant_id, driver_id, vehicle_id, route_id, started_at, duration_s, max_speed_kmh, limit_kmh, zone_name, point)
+    values (p_tenant_id, p_driver_id, p_vehicle_id, p_route_id, p_start, extract(epoch from p_end - p_start)::integer, p_max, p_limit, p_zone, p_point);
+  end if;
+end;
+$$;
+revoke all on function app.record_speed_run(uuid, uuid, uuid, uuid, timestamptz, timestamptz, numeric, integer, text, extensions.geography, integer) from public;
+
 -- ---------------------------------------------------------------------------
 -- GPS uploads: keep the latest position and record speed events.
 -- A speed event is a run of points over the limit (plus tolerance) lasting
@@ -497,18 +537,14 @@ begin
       run_limit := least(run_limit, v_limit);
     elsif run_start is not null then
       run_end := v_at;
-      if extract(epoch from run_end - run_start) >= s.speed_alert_after_s then
-        insert into public.speed_events (tenant_id, driver_id, vehicle_id, route_id, started_at, duration_s, max_speed_kmh, limit_kmh, zone_name, point)
-        values (new.tenant_id, new.driver_id, coalesce(new.vehicle_id, v_route.vehicle_id), v_route.id, run_start,
-          extract(epoch from run_end - run_start)::integer, run_max, run_limit, run_zone, run_point);
-      end if;
+      perform app.record_speed_run(new.tenant_id, new.driver_id, coalesce(new.vehicle_id, v_route.vehicle_id), v_route.id,
+        run_start, run_end, run_max, run_limit, run_zone, run_point, s.speed_alert_after_s);
       run_start := null;
     end if;
   end loop;
-  if run_start is not null and extract(epoch from run_end - run_start) >= s.speed_alert_after_s then
-    insert into public.speed_events (tenant_id, driver_id, vehicle_id, route_id, started_at, duration_s, max_speed_kmh, limit_kmh, zone_name, point)
-    values (new.tenant_id, new.driver_id, coalesce(new.vehicle_id, v_route.vehicle_id), v_route.id, run_start,
-      extract(epoch from run_end - run_start)::integer, run_max, run_limit, run_zone, run_point);
+  if run_start is not null then
+    perform app.record_speed_run(new.tenant_id, new.driver_id, coalesce(new.vehicle_id, v_route.vehicle_id), v_route.id,
+      run_start, run_end, run_max, run_limit, run_zone, run_point, s.speed_alert_after_s);
   end if;
 
   if v_last is not null then

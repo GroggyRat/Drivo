@@ -192,6 +192,16 @@ describe("GPS uploads", () => {
     expect(events[0]).toEqual({ duration_s: 16, max_speed_kmh: "71.0", limit_kmh: 50, zone_name: "Town" });
   });
 
+  it("records one event when a stretch of speeding spans two uploads", async () => {
+    const before = await count(client, "select count(*) from public.speed_events where driver_id = $1", [A.driver1]);
+    const start = Date.parse("2026-11-05T02:30:00Z");
+    await upload(A.driver1, [45, 62, 64, 66, 65], start);
+    await upload(A.driver1, [67, 66, 64, 44], start + 20_000);
+    const rows = (await client.query("select duration_s, max_speed_kmh from public.speed_events where driver_id = $1 and started_at between to_timestamp($2 / 1000.0) and to_timestamp(($2 + 60000) / 1000.0)", [A.driver1, start])).rows;
+    expect(await count(client, "select count(*) from public.speed_events where driver_id = $1", [A.driver1])).toBe(before + 1);
+    expect(rows).toEqual([{ duration_s: 28, max_speed_kmh: "67.0" }]);
+  });
+
   it("does not record a short burst over the limit", async () => {
     const before = await count(client, "select count(*) from public.speed_events");
     await upload(A.driver1, [48, 60, 62, 45], Date.parse("2026-11-05T02:00:00Z"));

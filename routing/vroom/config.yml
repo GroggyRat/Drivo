@@ -14,11 +14,13 @@ cliArgs:
   router: 'valhalla'
   timeout: 300000
   baseurl: '/'
+# Profiles are Valhalla costings. The API always sends its own matrices, so
+# VROOM only calls Valhalla if used directly.
 routingServers:
   valhalla:
-    car:
+    truck:
       host: 'valhalla'
       port: '8002'
-    truck:
+    auto:
       host: 'valhalla'
       port: '8002'

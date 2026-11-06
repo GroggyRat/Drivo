@@ -5,6 +5,8 @@ type Fetch = typeof fetch;
 
 export type EngineConfig = { valhallaUrl: string; vroomUrl: string; costing: string; fetch?: Fetch };
 
+const NOT_CONNECTED = "No road connects some of these stops, so they are probably on different islands. Plan a separate route for each island.";
+
 /** Fuel at idle, litres per hour, for the lowest-fuel cost. */
 const IDLE_LITRES_PER_HOUR = 1.0;
 
@@ -26,13 +28,95 @@ export class RoutingEngine {
   /** Travel time (s) and distance (m) between every pair of points. */
   async matrix(points: [number, number][]) {
     const locs = points.map(this.loc);
-    const r = await this.post<{ sources_to_targets: { time: number | null; distance: number | null }[][] }>(
-      `${this.cfg.valhallaUrl}/sources_to_targets`,
-      { sources: locs, targets: locs, costing: this.cfg.costing },
-    );
-    const durations = r.sources_to_targets.map((row) => row.map((c) => (c.time == null ? 9_999_999 : Math.round(c.time))));
-    const distances = r.sources_to_targets.map((row) => row.map((c) => (c.distance == null ? 9_999_999 : Math.round(c.distance * 1000))));
-    return { durations, distances };
+    let r: { sources_to_targets: { time: number | null; distance: number | null }[][] };
+    try {
+      r = await this.post(`${this.cfg.valhallaUrl}/sources_to_targets`, { sources: locs, targets: locs, costing: this.cfg.costing });
+    } catch (e) {
+      if (e instanceof UpstreamError && /unconnected regions|No path/i.test(e.message)) throw new PlanningError(NOT_CONNECTED);
+      throw e;
+    }
+    const durations = r.sources_to_targets.map((row) => row.map((c) => (c.time == null ? null : Math.round(c.time))));
+    const distances = r.sources_to_targets.map((row) => row.map((c) => (c.distance == null ? null : Math.round(c.distance * 1000))));
+    // Valhalla does not join roads across the 180 degree meridian (Taveuni).
+    // Fill those pairs by routing through a crossing point.
+    for (let i = 0; i < points.length; i++) {
+      for (let j = 0; j < points.length; j++) {
+        if (durations[i][j] != null || !straddles(points[i], points[j])) continue;
+        const leg = await this.legAcrossMeridian(points[i], points[j]);
+        if (leg) {
+          durations[i][j] = Math.round(leg.time);
+          distances[i][j] = Math.round(leg.length * 1000);
+        }
+      }
+    }
+    const unreachable = durations.some((row) => row.some((v) => v == null));
+    if (unreachable) {
+      const i = durations.findIndex((row) => row.some((v) => v == null));
+      const j = durations[i].findIndex((v) => v == null);
+      throw new PlanningError(`No road connects stop ${i === 0 ? "depot" : i} and ${j === 0 ? "depot" : j}. They may be on different islands: plan a route per island.`);
+    }
+    return { durations: durations as number[][], distances: distances as number[][] };
+  }
+
+  private crossings: [number, number][] | null = null;
+
+  /**
+   * Latitudes where roads cross the 180 degree meridian, found once by
+   * snapping points on both sides of the line and keeping pairs that meet.
+   */
+  private async meridianCrossings(): Promise<[number, number][]> {
+    if (this.crossings) return this.crossings;
+    const found: [number, number][] = [];
+    const lats: number[] = [];
+    for (let lat = -15.6; lat >= -19.6; lat -= 0.005) lats.push(Math.round(lat * 1000) / 1000);
+    const snap = async (lon: number) => {
+      const r = await this.post<{ edges?: { correlated_lon: number; correlated_lat: number }[] }[]>(`${this.cfg.valhallaUrl}/locate`, {
+        locations: lats.map((lat) => ({ lon, lat, radius: 60 })),
+        costing: this.cfg.costing,
+        verbose: false,
+      });
+      return r.map((x) => x.edges?.[0] ?? null);
+    };
+    const [west, east] = await Promise.all([snap(179.99995), snap(-179.99995)]);
+    for (let k = 0; k < lats.length; k++) {
+      const w = west[k];
+      const e = east[k];
+      if (!w || !e) continue;
+      if (Math.abs(Math.abs(w.correlated_lon) - 180) > 0.0005 || Math.abs(Math.abs(e.correlated_lon) - 180) > 0.0005) continue;
+      if (Math.abs(w.correlated_lat - e.correlated_lat) > 0.0005) continue;
+      const lat = (w.correlated_lat + e.correlated_lat) / 2;
+      if (!found.some(([, l]) => Math.abs(l - lat) < 0.003)) found.push([180, lat]);
+    }
+    this.crossings = found;
+    return found;
+  }
+
+  /** Fastest road route between points on opposite sides of the meridian, as one leg. */
+  async legAcrossMeridian(a: [number, number], b: [number, number]) {
+    let best: { time: number; length: number; shape: [number, number][] } | null = null;
+    for (const [, lat] of await this.meridianCrossings()) {
+      const aSide: [number, number] = [a[0] > 0 ? 179.99999 : -179.99999, lat];
+      const bSide: [number, number] = [b[0] > 0 ? 179.99999 : -179.99999, lat];
+      try {
+        const [first, second] = await Promise.all([this.simpleLeg(a, aSide), this.simpleLeg(bSide, b)]);
+        const total = { time: first.time + second.time, length: first.length + second.length, shape: [...first.shape, ...second.shape] };
+        if (!best || total.time < best.time) best = total;
+      } catch {
+        // This crossing does not connect these two points.
+      }
+    }
+    return best;
+  }
+
+  private async simpleLeg(a: [number, number], b: [number, number]) {
+    const r = await this.post<{ trip: { legs: { shape: string; summary: { time: number; length: number } }[] } }>(`${this.cfg.valhallaUrl}/route`, {
+      locations: [this.loc(a), this.loc(b)],
+      costing: this.cfg.costing,
+      directions_type: "none",
+      units: "kilometers",
+    });
+    const l = r.trip.legs[0];
+    return { time: l.summary.time, length: l.summary.length, shape: decodePolyline6(l.shape) };
   }
 
   /** Cost matrix VROOM minimises for each objective. */
@@ -49,9 +133,9 @@ export class RoutingEngine {
   async order(req: PlanRequest, objective: Objective, m: { durations: number[][]; distances: number[][] }): Promise<string[]> {
     const withCapacity = req.capacityCartons != null;
     const body = {
-      vehicles: [{ id: 1, profile: "car", start_index: 0, end_index: 0, ...(withCapacity ? { capacity: [req.capacityCartons] } : {}) }],
+      vehicles: [{ id: 1, profile: this.cfg.costing, start_index: 0, end_index: 0, ...(withCapacity ? { capacity: [req.capacityCartons] } : {}) }],
       jobs: req.stops.map((s, i) => ({ id: i + 1, location_index: i + 1, service: s.serviceS, ...(withCapacity ? { delivery: [s.cartons ?? 0] } : {}) })),
-      matrices: { car: { durations: m.durations, distances: m.distances, costs: RoutingEngine.costs(objective, m, req.litresPer100Km) } },
+      matrices: { [this.cfg.costing]: { durations: m.durations, distances: m.distances, costs: RoutingEngine.costs(objective, m, req.litresPer100Km) } },
     };
     const r = await this.post<{ code: number; unassigned: { id: number }[]; routes: { steps: { type: string; job?: number }[] }[] }>(this.cfg.vroomUrl, body);
     if (r.code !== 0) throw new UpstreamError("vroom", 200, `VROOM code ${r.code}`);
@@ -63,19 +147,33 @@ export class RoutingEngine {
   async route(req: PlanRequest, order: string[], objective: Objective): Promise<RouteOption> {
     const byId = new Map(req.stops.map((s) => [s.id, s]));
     const points: [number, number][] = [req.depot, ...order.map((id) => byId.get(id)!.position), req.depot];
-    const r = await this.post<{ trip: { legs: { shape: string; summary: { time: number; length: number } }[] } }>(`${this.cfg.valhallaUrl}/route`, {
-      locations: points.map((p) => ({ ...this.loc(p), type: "break" })),
-      costing: this.cfg.costing,
-      costing_options: objective === "shortest" ? { [this.cfg.costing]: { shortest: true } } : undefined,
-      directions_type: "none",
-      units: "kilometers",
-    });
-    const legs: Leg[] = r.trip.legs.map((l, i) => ({ toStopId: order[i] ?? null, distanceM: Math.round(l.summary.length * 1000), durationS: Math.round(l.summary.time) }));
-    const geometry: [number, number][] = [];
-    for (const l of r.trip.legs) {
-      const pts = decodePolyline6(l.shape);
-      geometry.push(...(geometry.length ? pts.slice(1) : pts));
+    let raw: { time: number; length: number; shape: [number, number][] }[];
+    try {
+      const r = await this.post<{ trip: { legs: { shape: string; summary: { time: number; length: number } }[] } }>(`${this.cfg.valhallaUrl}/route`, {
+        locations: points.map((p) => ({ ...this.loc(p), type: "break" })),
+        costing: this.cfg.costing,
+        costing_options: objective === "shortest" ? { [this.cfg.costing]: { shortest: true } } : undefined,
+        directions_type: "none",
+        units: "kilometers",
+      });
+      raw = r.trip.legs.map((l) => ({ time: l.summary.time, length: l.summary.length, shape: decodePolyline6(l.shape) }));
+    } catch (e) {
+      if (!(e instanceof UpstreamError)) throw e;
+      if (!points.some((p, i) => i > 0 && straddles(points[i - 1], p))) {
+        if (/unconnected regions|No path/i.test(e.message)) throw new PlanningError(NOT_CONNECTED);
+        throw e;
+      }
+      // A leg crosses the 180 degree meridian: route leg by leg.
+      raw = [];
+      for (let i = 1; i < points.length; i++) {
+        const leg = straddles(points[i - 1], points[i]) ? await this.legAcrossMeridian(points[i - 1], points[i]) : await this.simpleLeg(points[i - 1], points[i]);
+        if (!leg) throw new PlanningError(NOT_CONNECTED);
+        raw.push(leg);
+      }
     }
+    const legs: Leg[] = raw.map((l, i) => ({ toStopId: order[i] ?? null, distanceM: Math.round(l.length * 1000), durationS: Math.round(l.time) }));
+    const geometry: [number, number][] = [];
+    for (const l of raw) geometry.push(...(geometry.length ? l.shape.slice(1) : l.shape));
     const start = new Date(req.departureAt).getTime();
     let clock = start;
     const etas: string[] = [];
@@ -123,6 +221,11 @@ export class RoutingEngine {
       edges: r.edges.map((e) => ({ wayId: e.way_id, lengthM: Math.round(e.length * 1000), speedKmh: e.speed, forward: e.forward ?? true })),
     };
   }
+}
+
+/** True when two points are on opposite sides of the 180 degree meridian. */
+export function straddles(a: [number, number], b: [number, number]) {
+  return Math.abs(a[0]) > 170 && Math.abs(b[0]) > 170 && Math.sign(a[0]) !== Math.sign(b[0]);
 }
 
 export class UpstreamError extends Error {

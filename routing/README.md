@@ -87,8 +87,10 @@ The tests run the API against fake Valhalla and VROOM responses: key checks, val
 
 ## The 180 degree meridian
 
-Valhalla's graph uses longitudes from -180 to 180, and OpenStreetMap splits ways at the meridian, so routes on Taveuni and in the Lau Group work as normal. Before go-live, check a route from Waiyevo to Matei on Taveuni and a matrix that includes Lakeba against the live server.
+Valhalla does not join roads across the 180 degree meridian, which runs through Taveuni. The API handles it: when two points are on opposite sides and Valhalla finds no path, it finds where roads cross the meridian (once, by snapping points on both sides of the line) and routes through the fastest crossing. Checked with the real Fiji extract: Waiyevo to Matei routes along the Taveuni coast road.
 
-## Not verified in this repository
+Islands with no road between them (for example Suva and Lakeba in the Lau Group) cannot share a truck route: the API answers with a plain message asking for one route per island.
 
-The Compose file and update script have not been run against the live Geofabrik extract from the build environment, which could not reach Geofabrik. Run `scripts/update-osm.sh` and `docker compose up -d` on the VPS, then check `GET /health` and one `/v1/plan` call.
+## Checked with real data
+
+Built from the Geofabrik Fiji extract of 04/11/2026 (131 tiles): Walu Bay to Nausori is 19.1 km and 23 minutes by road, a four-stop Suva plan returns road lines for all three options, and Taveuni across the meridian works. Valhalla's time-zone build needs to download world boundaries from GitHub on the VPS; Fiji is one time zone, so building with `build_time_zones=False` is also fine.

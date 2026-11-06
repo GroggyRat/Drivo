@@ -28,7 +28,7 @@ const fakeFetch: typeof fetch = async (input, init) => {
   }
   if (url.startsWith("http://vroom")) {
     if (body.vehicles[0].capacity && body.vehicles[0].capacity[0] < 15) return json({ code: 0, unassigned: [{ id: 1 }], routes: [] });
-    const costs: number[] = body.matrices.car.costs[0];
+    const costs: number[] = body.matrices.truck.costs[0];
     const jobs = [...body.jobs].sort((a: any, b: any) => costs[a.location_index] - costs[b.location_index]);
     return json({ code: 0, unassigned: [], routes: [{ steps: [{ type: "start" }, ...jobs.map((j: any) => ({ type: "job", job: j.id })), { type: "end" }] }] });
   }
@@ -92,9 +92,9 @@ describe("routing API", () => {
     }
     const vroomBodies = calls.filter((c) => c.url.startsWith("http://vroom")).map((c) => c.body);
     // Shortest uses distances, fastest uses times, lowest fuel uses millilitres.
-    expect(vroomBodies[1].matrices.car.costs[0][1]).toBe(900);
-    expect(vroomBodies[2].matrices.car.costs[0][1]).toBe(15000);
-    expect(vroomBodies[0].matrices.car.costs[0][1]).toBe(Math.round((15000 * 14.5) / 100 + (900 * 1000) / 3600));
+    expect(vroomBodies[1].matrices.truck.costs[0][1]).toBe(900);
+    expect(vroomBodies[2].matrices.truck.costs[0][1]).toBe(15000);
+    expect(vroomBodies[0].matrices.truck.costs[0][1]).toBe(Math.round((15000 * 14.5) / 100 + (900 * 1000) / 3600));
   });
 
   it("explains when the stops do not fit the vehicle", async () => {
@@ -116,5 +116,14 @@ describe("routing API", () => {
   it("map-matches a trace into a line and per-way speeds", async () => {
     const res = await post("/v1/map-match", { points: [{ lon: 178.44, lat: -18.14, time: 0 }, { lon: 178.45, lat: -18.14, time: 100 }] });
     expect(await res.json()).toEqual({ geometry: [[178.44, -18.14], [178.45, -18.14]], edges: [{ wayId: 42, lengthM: 1050, speedKmh: 37, forward: true }] });
+  });
+});
+
+describe("the 180 degree meridian", () => {
+  it("knows which legs cross it", async () => {
+    const { straddles } = await import("../src/engine.js");
+    expect(straddles([179.98, -16.79], [-179.885, -16.69])).toBe(true);
+    expect(straddles([178.43, -18.13], [178.53, -18.03])).toBe(false);
+    expect(straddles([-179.9, -16.7], [-179.8, -16.6])).toBe(false);
   });
 });
