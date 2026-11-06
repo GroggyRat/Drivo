@@ -9,6 +9,13 @@ public final class SpeedMonitor {
         public let limitKmh: Int?
         public let over: Bool
         public let alert: Bool
+
+        public init(speedKmh: Int, limitKmh: Int?, over: Bool, alert: Bool) {
+            self.speedKmh = speedKmh
+            self.limitKmh = limitKmh
+            self.over = over
+            self.alert = alert
+        }
     }
 
     private let afterMs: Int64

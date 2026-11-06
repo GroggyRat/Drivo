@@ -46,7 +46,7 @@ struct NavigateView: View {
                     VStack(spacing: 8) {
                         SecondaryButton(title: muted ? "Unmute voice" : "Mute voice") {
                             muted.toggle()
-                            Navigation.speech.isMuted = muted
+                            if Navigation.speech.isMuted != muted { Navigation.speech.toggleMute() }
                         }
                         NavigationLink { ArrivedView(stopId: stopId) } label: {
                             Text("Arrived").font(.drivoLabel).frame(maxWidth: .infinity, minHeight: 48).foregroundStyle(DrivoColor.ink)

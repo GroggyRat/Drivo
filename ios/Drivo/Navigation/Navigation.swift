@@ -29,7 +29,7 @@ enum Navigation {
         )
     }()
 
-    static let speech = AVSpeechSpokenInstructionObserver(isMuted: false)
+    static let speech = SpokenInstructionObserver.initAVSpeechSynthesizer(isMuted: false)
 }
 
 /// Adds the driver's Supabase token to Ferrostar's route requests.
