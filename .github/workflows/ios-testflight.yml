@@ -1,0 +1,110 @@
+name: iOS TestFlight
+
+# Builds, signs and uploads the driver app to TestFlight. Run it from the
+# Actions tab (Run workflow). Signing is managed by Apple through the App
+# Store Connect API key, so no certificates are stored here.
+#
+# Repository secrets (Settings, Secrets and variables, Actions):
+#   APPLE_TEAM_ID        10-character Team ID (developer.apple.com, Membership)
+#   ASC_KEY_ID           App Store Connect API key id
+#   ASC_ISSUER_ID        App Store Connect issuer id
+#   ASC_KEY_P8           contents of the AuthKey_<id>.p8 file (Admin role)
+#   DRIVO_SUPABASE_URL   https://<project>.supabase.co
+#   DRIVO_SUPABASE_KEY   Supabase publishable (anon) key
+#   DRIVO_WEB_URL        https://<admin web domain>
+# Optional repository variable:
+#   DRIVO_MAP_STYLE_URL  map style; defaults to OpenFreeMap
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets are set
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          DRIVO_SUPABASE_URL: ${{ secrets.DRIVO_SUPABASE_URL }}
+          DRIVO_SUPABASE_KEY: ${{ secrets.DRIVO_SUPABASE_KEY }}
+          DRIVO_WEB_URL: ${{ secrets.DRIVO_WEB_URL }}
+        run: |
+          missing=0
+          for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 DRIVO_SUPABASE_URL DRIVO_SUPABASE_KEY DRIVO_WEB_URL; do
+            if [ -z "${!v}" ]; then echo "Missing secret: $v"; missing=1; fi
+          done
+          exit $missing
+
+      - name: App settings and API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          DRIVO_SUPABASE_URL: ${{ secrets.DRIVO_SUPABASE_URL }}
+          DRIVO_SUPABASE_KEY: ${{ secrets.DRIVO_SUPABASE_KEY }}
+          DRIVO_WEB_URL: ${{ secrets.DRIVO_WEB_URL }}
+          DRIVO_MAP_STYLE_URL: ${{ vars.DRIVO_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty' }}
+        run: |
+          esc() { printf '%s' "$1" | sed 's#//#/$()/#g'; }
+          {
+            echo "DRIVO_SUPABASE_URL = $(esc "$DRIVO_SUPABASE_URL")"
+            echo "DRIVO_SUPABASE_KEY = $DRIVO_SUPABASE_KEY"
+            echo "DRIVO_WEB_URL = $(esc "$DRIVO_WEB_URL")"
+            echo "DRIVO_MAP_STYLE_URL = $(esc "$DRIVO_MAP_STYLE_URL")"
+          } > Config.local.xcconfig
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+
+      - name: Generate the Xcode project
+        run: brew install xcodegen && xcodegen generate
+
+      - name: Archive
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild -project Drivo.xcodeproj -scheme Drivo -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Drivo.xcarchive" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            archive | tail -100
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload to TestFlight
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Drivo.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" | tail -60
+          exit ${PIPESTATUS[0]}
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"

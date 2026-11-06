@@ -51,6 +51,7 @@ targets:
       properties:
         CFBundleDisplayName: Drivo
         UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIAppFonts: [IBMPlexSans-Regular.ttf, IBMPlexSans-Medium.ttf, IBMPlexSans-SemiBold.ttf]
         UIBackgroundModes: [location, fetch, processing]
