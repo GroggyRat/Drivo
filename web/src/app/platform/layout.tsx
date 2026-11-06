@@ -16,6 +16,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[#d6deeb]">{ctx.platformName ?? "Platform owner"}</span>
+            <Link href="/account/password" className="btn btn-sm border border-white/30 text-white hover:bg-white/10">Change password</Link>
             {ctx.isManager && <Link href="/" className="btn btn-sm border border-white/30 text-white hover:bg-white/10">Company workspace</Link>}
             <form action="/auth/sign-out" method="post">
               <button className="btn btn-sm border border-white/30 text-white hover:bg-white/10" type="submit">Sign out</button>

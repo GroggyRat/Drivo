@@ -64,6 +64,7 @@ export function AppShell({ tenantName, userName, roleLabel, tenantSwitcher, plat
           {tenantSwitcher}
           <p className="mt-3 text-sm font-medium">{userName}</p>
           <p className="text-xs text-[#c7d2e4]">{roleLabel}</p>
+          <Link href="/account/password" className="mt-1 block text-xs text-[#d6deeb] underline-offset-2 hover:underline">Change password</Link>
           <form action="/auth/sign-out" method="post" className="mt-3">
             <button className="btn btn-sm w-full border border-white/30 text-white hover:bg-white/10" type="submit">
               <IconSignOut /> Sign out
