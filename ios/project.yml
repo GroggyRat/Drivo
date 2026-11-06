@@ -18,12 +18,14 @@ packages:
   Ferrostar:
     url: https://github.com/stadiamaps/ferrostar
     exactVersion: 0.30.0
+  # Pinned to the versions Ferrostar 0.30 is tested with: newer swiftui-dsl
+  # releases change the API Ferrostar's map views use.
   MapLibre:
     url: https://github.com/maplibre/maplibre-gl-native-distribution
-    from: 6.10.0
+    exactVersion: 6.11.0
   MapLibreSwiftUI:
     url: https://github.com/maplibre/swiftui-dsl
-    from: 0.3.0
+    exactVersion: 0.7.0
 targets:
   Drivo:
     type: application
