@@ -100,3 +100,85 @@ export async function importOrders(formData: FormData) {
   revalidatePath("/orders");
   redirect(`/orders?tab=import&notice=imported&count=${added}${problems.length ? `&problems=${encodeURIComponent(problems.slice(0, 5).join("; "))}` : ""}`);
 }
+
+const deliverySchema = z.object({
+  locationId: z.string().min(1),
+  placeName: z.string().trim().max(200).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lon: z.coerce.number().min(-180).max(180).optional(),
+  directions: z.string().trim().max(2000).optional(),
+  customer: z.string().trim().max(200).optional(),
+  reference: z.string().trim().min(1, "Enter the invoice number").max(100),
+  cartons: z.coerce.number().int().min(0).max(10000),
+  total: z.string().trim().optional(),
+  notes: z.string().trim().max(500).optional(),
+  invoicePath: z.string().optional(),
+});
+
+/**
+ * "Add delivery", for companies without BillZilla: a place (known or a new
+ * pin), the invoice number and its PDF. The customer is found or added at
+ * that place.
+ */
+export async function addDelivery(formData: FormData) {
+  const ctx = await requireManager();
+  const back = "/orders?tab=add";
+  const parsed = deliverySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect(`${back}&error=${encodeURIComponent(parsed.error.issues[0].message)}`);
+  const d = parsed.data!;
+  const total = d.total ? Number(d.total.replace(/[^0-9.]/g, "")) : null;
+  if (total !== null && !(total >= 0)) redirect(`${back}&error=${encodeURIComponent("Enter the total as a number, for example 217.50")}`);
+  if (d.invoicePath && !(d.invoicePath.startsWith(`${ctx.tenant.id}/`) && d.invoicePath.endsWith(".pdf"))) redirect(`${back}&error=Upload+the+PDF+again`);
+
+  // Where it goes.
+  let locationId = d.locationId;
+  let placeName = "";
+  let approved = true;
+  if (locationId === "new") {
+    if (!d.placeName || d.lat === undefined || d.lon === undefined) redirect(`${back}&error=${encodeURIComponent("Name the shop and click the map to place the pin")}`);
+    const { data, error } = await ctx.supabase.rpc("submit_location", {
+      p_tenant_id: ctx.tenant.id, p_name: d.placeName, p_type: "shop", p_lon: d.lon, p_lat: d.lat, p_accuracy_m: null,
+      p_landmark_directions: d.directions || null, p_photo_path: null, p_address: null, p_expires_at: null,
+    });
+    if (error) redirect(`${back}&error=${encodeURIComponent(error.message)}`);
+    const r = data as { id: string; status: string };
+    locationId = r.id;
+    approved = r.status === "approved";
+    placeName = d.placeName!;
+  } else {
+    const { data: loc } = await ctx.supabase.from("locations").select("name").eq("id", locationId).eq("tenant_id", ctx.tenant.id).eq("status", "approved").maybeSingle();
+    if (!loc) redirect(`${back}&error=${encodeURIComponent("Choose the place again")}`);
+    placeName = loc!.name;
+  }
+
+  // Who it is for: an existing customer at this place, or a new one.
+  const customerName = d.customer || placeName;
+  const { data: existing } = await ctx.supabase.from("customers").select("id, location_id")
+    .eq("tenant_id", ctx.tenant.id).ilike("name", customerName.replace(/[%_]/g, "\\$&")).eq("active", true);
+  let customerId = (existing ?? []).find((c) => c.location_id === locationId)?.id as string | undefined;
+  if (!customerId) {
+    const { data: created, error } = await ctx.supabase.from("customers")
+      .insert({ tenant_id: ctx.tenant.id, source: "manual", name: customerName, location_id: approved ? locationId : null })
+      .select("id").single();
+    if (error || !created) redirect(`${back}&error=${encodeURIComponent("Could not add the customer")}`);
+    customerId = created!.id;
+  }
+
+  const { error } = await ctx.supabase.from("orders").insert({
+    tenant_id: ctx.tenant.id,
+    source: "manual",
+    reference: d.reference,
+    customer_id: customerId,
+    customer_name: customerName,
+    cartons: d.cartons,
+    total_amount: total,
+    line_items: d.notes ? [{ description: d.notes, quantity: 1 }] : [],
+    invoice_pdf_path: d.invoicePath || null,
+    confirmed_at: new Date().toISOString(),
+  });
+  if (error) redirect(`${back}&error=${encodeURIComponent(error.code === "23505" ? "That invoice number is already in Drivo" : "Could not add the delivery")}`);
+  revalidatePath("/orders");
+  revalidatePath("/plan");
+  revalidatePath("/locations");
+  redirect(`/orders?notice=added${approved ? "" : "&pending=1"}`);
+}

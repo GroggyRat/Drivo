@@ -8,6 +8,8 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.storage.storage
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -63,7 +65,7 @@ class DrivoRepository(private val context: Context, val supabase: SupabaseClient
     private val routeColumns = Columns.raw(
         "id, name, status, route_date, vehicle_id, planned_distance_m, planned_duration_s, depot:depots(name, lon, lat), " +
             "route_stops(id, sequence, status, planned_eta, completed_at, location:locations(id, name, lon, lat, landmark_directions), " +
-            "order:orders(id, reference, customer_name, cartons, line_items, customer:customers(phone)))",
+            "order:orders(id, reference, customer_name, cartons, line_items, invoice_pdf_path, customer:customers(phone)))",
     )
 
     fun today(): String = LocalDate.now(fiji).toString()
@@ -87,6 +89,21 @@ class DrivoRepository(private val context: Context, val supabase: SupabaseClient
     suspend fun speedZones(): List<SpeedZone> = runCatching {
         supabase.from("speed_zones").select(Columns.list("name", "limit_kmh", "area_geojson")) { filter { eq("active", true) } }.decodeList<SpeedZone>()
     }.getOrDefault(emptyList())
+
+    private fun tenantArg() = buildJsonObject { membership?.let { put("p_tenant_id", it.tenantId) } }
+
+    /** Whether to offer Clock in, and the open shift. Null when offline. */
+    suspend fun myShift(): ShiftInfo? = runCatching {
+        supabase.postgrest.rpc("my_shift", tenantArg()).decodeAs<ShiftInfo>()
+    }.getOrNull()
+
+    suspend fun clockIn(): ShiftInfo = supabase.postgrest.rpc("clock_in", tenantArg()).decodeAs()
+
+    suspend fun clockOut(): ShiftInfo = supabase.postgrest.rpc("clock_out", tenantArg()).decodeAs()
+
+    /** A five-minute link to an order's invoice PDF. Needs signal. */
+    suspend fun invoiceUrl(path: String): String =
+        supabase.storage.from("invoices").createSignedUrl(path, 5.minutes)
 
     /** Starting a route: online only, because it also starts tracking without KaiWorkforce. */
     suspend fun startRoute(routeId: String): JsonObject =

@@ -24,7 +24,20 @@ data class StopOrder(
     val cartons: Int,
     @SerialName("line_items") val lineItems: List<LineItem> = emptyList(),
     val customer: StopCustomer? = null,
+    @SerialName("invoice_pdf_path") val invoicePdfPath: String? = null,
 )
+
+/** The driver's shift, from my_shift, clock_in and clock_out. */
+@Serializable
+data class ShiftInfo(
+    /** False when the company clocks in through KaiWorkforce. */
+    @SerialName("clock_in_here") val clockInHere: Boolean,
+    val tracking: Boolean,
+    val shift: OpenShift? = null,
+)
+
+@Serializable
+data class OpenShift(val id: String, val source: String, @SerialName("started_at") val startedAt: String)
 
 @Serializable
 data class StopCustomer(val phone: String? = null)

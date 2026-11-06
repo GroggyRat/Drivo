@@ -12,6 +12,8 @@ final class AppModel: ObservableObject {
     @Published var message: String?
     @Published var ledger: [LedgerEntry] = []
     @Published var waiting = 0
+    @Published var shift: ShiftInfo?
+    @Published var clocking = false
 
     private let repo = Repository.shared
     private var listening = false
@@ -54,6 +56,38 @@ final class AppModel: ObservableObject {
         await reloadLedger()
         loading = false
         if let m { listenForShifts(tenantId: m.tenantId) }
+        if let s = await repo.myShift() { apply(s) }
+    }
+
+    /// Tracking follows the shift the server holds: on while it is open, off once it ends.
+    private func apply(_ s: ShiftInfo) {
+        shift = s
+        let tracker = LocationTracker.shared
+        if s.tracking && !tracker.tracking { tracker.start(vehicleId: active?.vehicleId) }
+        if !s.tracking && tracker.tracking { tracker.stop() }
+    }
+
+    /// Clock in and out in Drivo, for companies without KaiWorkforce.
+    func clockIn() async {
+        LocationTracker.shared.requestPermission()
+        await clock { try await self.repo.clockIn() }
+    }
+
+    func clockOut() async { await clock { try await self.repo.clockOut() } }
+
+    private func clock(_ call: () async throws -> ShiftInfo) async {
+        clocking = true
+        message = nil
+        do { apply(try await call()) } catch { message = "Could not reach Drivo. Check your signal and try again." }
+        clocking = false
+    }
+
+    /// A link for the invoice PDF, or nil with a message when there is no signal.
+    func invoiceURL(_ path: String) async -> URL? {
+        do { return try await repo.invoiceURL(path: path) } catch {
+            message = "The invoice needs signal to open. Try again when you have signal."
+            return nil
+        }
     }
 
     func reloadLedger() async {

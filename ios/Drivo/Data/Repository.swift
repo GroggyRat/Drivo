@@ -62,7 +62,7 @@ final class Repository: @unchecked Sendable {
         let date = Self.today()
         do {
             let data = try await client.from("routes")
-                .select("id, name, status, route_date, vehicle_id, planned_distance_m, depot:depots(name, lon, lat), route_stops(id, sequence, status, planned_eta, location:locations(id, name, lon, lat, landmark_directions), order:orders(id, reference, customer_name, cartons, line_items, customer:customers(phone)))")
+                .select("id, name, status, route_date, vehicle_id, planned_distance_m, depot:depots(name, lon, lat), route_stops(id, sequence, status, planned_eta, location:locations(id, name, lon, lat, landmark_directions), order:orders(id, reference, customer_name, cartons, line_items, invoice_pdf_path, customer:customers(phone)))")
                 .eq("route_date", value: date)
                 .execute().data
             await store.saveRoutes(data, date: date)
@@ -86,6 +86,26 @@ final class Repository: @unchecked Sendable {
     }
 
     struct StartResult: Decodable { let tracking: Bool }
+
+    private var tenantArg: [String: String] { membership.map { ["p_tenant_id": $0.tenantId] } ?? [:] }
+
+    /// Whether to offer Clock in, and the open shift. Nil when offline.
+    func myShift() async -> ShiftInfo? {
+        try? await client.rpc("my_shift", params: tenantArg).execute().value
+    }
+
+    func clockIn() async throws -> ShiftInfo {
+        try await client.rpc("clock_in", params: tenantArg).execute().value
+    }
+
+    func clockOut() async throws -> ShiftInfo {
+        try await client.rpc("clock_out", params: tenantArg).execute().value
+    }
+
+    /// A five-minute link to an order's invoice PDF. Needs signal.
+    func invoiceURL(path: String) async throws -> URL {
+        try await client.storage.from("invoices").createSignedURL(path: path, expiresIn: 300)
+    }
 
     /// Starting a route is online only: without KaiWorkforce it also starts tracking.
     func startRoute(_ routeId: String) async throws -> StartResult {

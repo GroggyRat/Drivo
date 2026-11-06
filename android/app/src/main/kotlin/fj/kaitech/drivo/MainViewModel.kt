@@ -6,8 +6,12 @@ import androidx.lifecycle.viewModelScope
 import fj.kaitech.drivo.data.PinInput
 import fj.kaitech.drivo.data.ProofInput
 import fj.kaitech.drivo.data.Route
+import fj.kaitech.drivo.data.ShiftInfo
 import fj.kaitech.drivo.data.Stop
 import fj.kaitech.drivo.tracking.TrackingService
+import fj.kaitech.drivo.tracking.TrackingState
+import android.content.Intent
+import android.net.Uri
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +31,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val routes: List<Route> = emptyList(),
         val online: Boolean = true,
         val message: String? = null,
+        val shift: ShiftInfo? = null,
+        val clocking: Boolean = false,
     ) {
         val active get() = routes.firstOrNull { it.status == "in_progress" } ?: routes.firstOrNull { it.status == "sent" }
     }
@@ -70,6 +76,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val (routes, online) = repo.todaysRoutes()
         state.value = state.value.copy(loading = false, routes = routes, online = online, name = m?.fullName ?: "")
         if (m != null) listenForShifts(m.tenantId)
+        repo.myShift()?.let { applyShift(it) }
+    }
+
+    /** Tracking follows the shift the server holds: on while it is open, off once it ends. */
+    private fun applyShift(shift: ShiftInfo) {
+        state.value = state.value.copy(shift = shift)
+        val running = TrackingState.flow.value.tracking
+        if (shift.tracking && !running) TrackingService.start(getApplication(), state.value.active?.vehicleId)
+        if (!shift.tracking && running) TrackingService.stop(getApplication())
+    }
+
+    /** Clock in and out in Drivo, for companies without KaiWorkforce. */
+    fun clockIn() = clock { repo.clockIn() }
+    fun clockOut() = clock { repo.clockOut() }
+
+    private fun clock(call: suspend () -> ShiftInfo) = viewModelScope.launch {
+        state.value = state.value.copy(clocking = true, message = null)
+        runCatching { call() }
+            .onSuccess { applyShift(it) }
+            .onFailure { state.value = state.value.copy(message = "Could not reach Drivo. Check your signal and try again.") }
+        state.value = state.value.copy(clocking = false)
+    }
+
+    /** Opens the invoice PDF in the phone's PDF viewer. */
+    fun openInvoice(path: String) = viewModelScope.launch {
+        runCatching { repo.invoiceUrl(path) }
+            .onSuccess { url ->
+                getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            .onFailure { state.value = state.value.copy(message = "The invoice needs signal to open. Try again when you have signal.") }
     }
 
     private var listening = false

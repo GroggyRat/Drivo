@@ -29,6 +29,7 @@ fun ArrivedScreen(vm: MainViewModel, nav: NavController, stopId: String) {
         Text("You are at ${stop.location.name}", style = MaterialTheme.typography.headlineSmall)
         stop.order?.let { Text("${it.reference}, ${it.customerName}, ${it.cartons} cartons", color = Drivo.Muted) }
         stop.location.directions?.let { Card { Text(it) } }
+        stop.order?.invoicePdfPath?.let { path -> SecondaryButton("Open invoice", { vm.openInvoice(path) }, Modifier.fillMaxWidth()) }
         PrimaryButton("Check in and start delivery", {
             vm.arrive(stop, fix?.lon, fix?.lat)
             nav.navigate("proof/$stopId")

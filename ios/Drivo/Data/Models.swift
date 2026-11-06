@@ -32,7 +32,24 @@ struct StopOrder: Codable, Equatable, Hashable {
     let cartons: Int
     let lineItems: [LineItem]
     let customer: StopCustomer?
-    enum CodingKeys: String, CodingKey { case id, reference, cartons, customer, customerName = "customer_name", lineItems = "line_items" }
+    var invoicePdfPath: String? = nil
+    enum CodingKeys: String, CodingKey { case id, reference, cartons, customer, customerName = "customer_name", lineItems = "line_items", invoicePdfPath = "invoice_pdf_path" }
+}
+
+/// The driver's shift, from my_shift, clock_in and clock_out.
+struct ShiftInfo: Codable, Equatable {
+    /// False when the company clocks in through KaiWorkforce.
+    let clockInHere: Bool
+    let tracking: Bool
+    let shift: OpenShift?
+    enum CodingKeys: String, CodingKey { case tracking, shift, clockInHere = "clock_in_here" }
+}
+
+struct OpenShift: Codable, Equatable {
+    let id: String
+    let source: String
+    let startedAt: Date
+    enum CodingKeys: String, CodingKey { case id, source, startedAt = "started_at" }
 }
 
 struct Stop: Codable, Equatable, Hashable, Identifiable {

@@ -43,12 +43,33 @@ fun RunScreen(vm: MainViewModel, nav: NavController) {
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true && route != null) vm.startRoute(route)
     }
+    val clockInPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) vm.clockIn()
+    }
 
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Today's run", style = MaterialTheme.typography.headlineSmall)
             if (!ui.online) Badge("No signal: showing the run saved at shift start", Tone.Amber)
             ui.message?.let { Text(it, color = Drivo.Bad) }
+        }
+        ui.shift?.takeIf { it.clockInHere }?.let { shift ->
+            item {
+                Card {
+                    val open = shift.shift
+                    if (open != null) {
+                        Text("On shift since ${timeOf(open.startedAt)}", style = MaterialTheme.typography.titleMedium)
+                        Text("Your location is shared with your dispatcher until you clock out.", color = Drivo.Muted)
+                        SecondaryButton("Clock out", { vm.clockOut() }, Modifier.fillMaxWidth(), enabled = !ui.clocking)
+                    } else {
+                        Text("Not on shift", style = MaterialTheme.typography.titleMedium)
+                        Text("Clock in when you start work. Your location is shared until you clock out.", color = Drivo.Muted)
+                        PrimaryButton("Clock in", {
+                            clockInPermissions.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS))
+                        }, Modifier.fillMaxWidth(), enabled = !ui.clocking)
+                    }
+                }
+            }
         }
         if (route == null) {
             item { Card { Text(if (ui.loading) "Loading your run" else "No route sent to you for today.", color = Drivo.Muted) } }
@@ -74,6 +95,7 @@ fun RunScreen(vm: MainViewModel, nav: NavController) {
                     Text("Next stop", style = MaterialTheme.typography.labelSmall, color = Drivo.Muted)
                     Text("${next.sequence}. ${next.location.name}", style = MaterialTheme.typography.titleMedium)
                     next.order?.let { Text("${it.reference}, ${it.cartons} cartons", color = Drivo.Muted) }
+                    next.order?.invoicePdfPath?.let { path -> SecondaryButton("Open invoice", { vm.openInvoice(path) }, Modifier.fillMaxWidth()) }
                     next.location.directions?.let { Text(it, color = Drivo.Muted) }
                     if (next.plannedEta != null) Text("Planned ${timeOf(next.plannedEta)}", color = Drivo.Muted)
                     val started = route.status == "in_progress"

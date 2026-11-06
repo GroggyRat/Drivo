@@ -322,3 +322,70 @@ describe("nightly trips", () => {
     expect(row).toEqual({ sample_count: 40, mean_speed_kmh: "37.5" });
   });
 });
+
+describe("Clock-in in the Drivo app", () => {
+  const rpc = (userId: string, fn: string) =>
+    asUser(client, userId, async (q) => (await q.query(`select public.${fn}($1) as r`, [A.tenant])).rows[0].r, { commit: true });
+
+  beforeAll(async () => {
+    await client.query("update public.tenants set kaiworkforce_enabled = false where id = $1", [A.tenant]);
+    await client.query("update public.shifts set ended_at = now() where tenant_id = $1 and ended_at is null", [A.tenant]);
+  });
+
+  it("a driver clocks in and out, and clocking in twice keeps one shift", async () => {
+    expect(await rpc(A.driver1, "my_shift")).toMatchObject({ clock_in_here: true, tracking: false, shift: null });
+    const first = await rpc(A.driver1, "clock_in");
+    expect(first).toMatchObject({ tracking: true, shift: { source: "drivo" } });
+    expect((await rpc(A.driver1, "clock_in")).shift.id).toBe(first.shift.id);
+    expect(await rpc(A.driver1, "clock_out")).toMatchObject({ tracking: false, shift: null });
+    const ended = (await client.query("select ended_at from public.shifts where id = $1", [first.shift.id])).rows[0].ended_at;
+    expect(ended).not.toBeNull();
+  });
+
+  it("is for drivers only, and companies on KaiWorkforce clock in there", async () => {
+    await expectDenied(asUser(client, A.dispatcher, (q) => q.query("select public.clock_in($1)", [A.tenant])));
+    await expectDenied(asUser(client, B.driver1, (q) => q.query("select public.clock_in($1)", [A.tenant])));
+    await client.query("update public.tenants set kaiworkforce_enabled = true where id = $1", [A.tenant]);
+    expect(await rpc(A.driver1, "my_shift")).toMatchObject({ clock_in_here: false });
+    await expect(asUser(client, A.driver1, (q) => q.query("select public.clock_in($1)", [A.tenant]))).rejects.toThrow(/KaiWorkforce/);
+    await client.query("update public.tenants set kaiworkforce_enabled = false where id = $1", [A.tenant]);
+  });
+
+  it("closes a shift left open for more than 16 hours, at the last upload", async () => {
+    const s = (await client.query(
+      "insert into public.shifts (tenant_id, driver_id, source, started_at) values ($1, $2, 'drivo', now() - interval '20 hours') returning id",
+      [A.tenant, A.driver1])).rows[0].id;
+    await client.query(
+      `insert into public.gps_batches (id, tenant_id, driver_id, shift_id, recorded_from, recorded_to, point_count, points)
+       values (gen_random_uuid(), $1, $2, $3, now() - interval '12 hours', now() - interval '11 hours', 1, '[[0, 178.44, -18.14, 5, 0, 0]]')`,
+      [A.tenant, A.driver1, s]);
+    await expectDenied(asUser(client, A.owner, (q) => q.query("select public.close_forgotten_shifts()")));
+    const closed = await asService(client, async (q) => (await q.query("select public.close_forgotten_shifts() as n")).rows[0].n, { commit: true });
+    expect(closed).toBeGreaterThanOrEqual(1);
+    const r = (await client.query("select ended_at < now() - interval '10 hours' as at_upload from public.shifts where id = $1", [s])).rows[0];
+    expect(r.at_upload).toBe(true);
+  });
+});
+
+describe("Invoice PDFs", () => {
+  const path = `${A.tenant}/inv-1.pdf`;
+  const put = (userId: string, name: string) =>
+    asUser(client, userId, (q) => q.query("insert into storage.objects (bucket_id, name) values ('invoices', $1)", [name]), { commit: true });
+  const canRead = (userId: string) =>
+    asUser(client, userId, async (q) => count(q, "select count(*) from storage.objects where bucket_id = 'invoices' and name = $1", [path]));
+
+  it("managers upload to their company's folder and attach the PDF to an order", async () => {
+    await put(A.dispatcher, path);
+    await expectDenied(put(A.driver1, `${A.tenant}/driver.pdf`));
+    await expectDenied(put(B.admin, `${A.tenant}/other.pdf`));
+    await client.query("update public.orders set invoice_pdf_path = $1 where id = $2", [path, A.orderLinked]);
+    await expect(client.query("update public.orders set invoice_pdf_path = $1 where id = $2", [`${B.tenant}/x.pdf`, A.orderLinked])).rejects.toThrow(/orders_invoice_in_tenant/);
+  });
+
+  it("the driver of the route reads it; other drivers and companies do not", async () => {
+    expect(await canRead(A.dispatcher)).toBe(1);
+    expect(await canRead(A.driver1)).toBe(1);
+    expect(await canRead(A.driver2)).toBe(0);
+    expect(await canRead(B.admin)).toBe(0);
+  });
+});

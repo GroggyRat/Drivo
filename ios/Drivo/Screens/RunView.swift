@@ -11,6 +11,7 @@ struct RunView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if !model.online { Badge(text: "No signal: showing the run saved at shift start", tone: .amber) }
                 if let m = model.message { Text(m).foregroundStyle(DrivoColor.bad) }
+                if let s = model.shift, s.clockInHere { shiftPanel(s) }
                 if let route = model.active {
                     summary(route)
                     if let next = route.nextStop { nextStop(route, next) }
@@ -40,6 +41,20 @@ struct RunView: View {
         .refreshable { await model.refresh() }
     }
 
+    private func shiftPanel(_ s: ShiftInfo) -> some View {
+        Panel {
+            if let open = s.shift {
+                Text("On shift since \(fijiTime(open.startedAt))").font(.drivoHeading)
+                Text("Your location is shared with your dispatcher until you clock out.").foregroundStyle(DrivoColor.muted)
+                SecondaryButton(title: "Clock out", enabled: !model.clocking) { Task { await model.clockOut() } }
+            } else {
+                Text("Not on shift").font(.drivoHeading)
+                Text("Clock in when you start work. Your location is shared until you clock out.").foregroundStyle(DrivoColor.muted)
+                PrimaryButton(title: "Clock in", enabled: !model.clocking) { Task { await model.clockIn() } }
+            }
+        }
+    }
+
     private func summary(_ route: Route) -> some View {
         let done = route.stops.filter { !$0.isOpen }.count
         let cartons = route.stops.compactMap { $0.order?.cartons }.reduce(0, +)
@@ -60,6 +75,9 @@ struct RunView: View {
             Text("Next stop").font(.plex(12, .medium, relativeTo: .caption)).foregroundStyle(DrivoColor.muted)
             Text("\(next.sequence). \(next.location.name)").font(.drivoHeading)
             if let o = next.order { Text("\(o.reference), \(o.cartons) cartons").foregroundStyle(DrivoColor.muted) }
+            if let path = next.order?.invoicePdfPath {
+                SecondaryButton(title: "Open invoice") { Task { if let url = await model.invoiceURL(path) { openURL(url) } } }
+            }
             if let d = next.location.directions { Text(d).foregroundStyle(DrivoColor.muted) }
             NavigationLink { NavigateView(stopId: next.id) } label: {
                 Text("Start navigation").font(.drivoLabel).frame(maxWidth: .infinity, minHeight: 48)
