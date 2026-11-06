@@ -1,0 +1,9 @@
+[Unit]
+Description=Drivo: download fresh Fiji OSM data and rebuild Valhalla tiles
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/drivo/routing
+ExecStart=/opt/drivo/routing/scripts/update-osm.sh

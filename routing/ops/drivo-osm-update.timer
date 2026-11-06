@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly Fiji OSM update for Drivo routing
+
+[Timer]
+# First Sunday-ish of the month, 03:15 Fiji time is 15:15 UTC the day before.
+OnCalendar=*-*-01 15:15:00 UTC
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

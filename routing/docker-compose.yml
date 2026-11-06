@@ -1,0 +1,75 @@
+# Drivo routing server: Valhalla (routing, matrices, turn-by-turn, map
+# matching) and VROOM (stop order), behind a small authenticated API.
+# Only the API is published; Caddy terminates TLS for it.
+#
+#   cp .env.example .env    (set ROUTING_API_KEY and ROUTING_DOMAIN)
+#   scripts/update-osm.sh   (first run: downloads Fiji and builds tiles)
+#   docker compose up -d
+
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:3.5.1
+    restart: unless-stopped
+    volumes:
+      - ./data/valhalla:/custom_files
+    environment:
+      # Tiles are built from the Fiji extract that scripts/update-osm.sh
+      # downloads into data/valhalla. No downloads happen inside the container.
+      - use_tiles_ignore_pbf=True
+      - force_rebuild=False
+      - build_admins=True
+      - build_time_zones=True
+      - build_elevation=False
+      - serve_tiles=True
+      - server_threads=2
+    expose:
+      - "8002"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 10m
+
+  vroom:
+    image: ghcr.io/vroom-project/vroom-docker:v1.14.0
+    restart: unless-stopped
+    environment:
+      - VROOM_ROUTER=valhalla
+    volumes:
+      - ./vroom:/conf
+    expose:
+      - "3000"
+    depends_on:
+      - valhalla
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      - ROUTING_API_KEY=${ROUTING_API_KEY:?Set ROUTING_API_KEY in .env}
+      - VALHALLA_URL=http://valhalla:8002
+      - VROOM_URL=http://vroom:3000
+      - COSTING=${COSTING:-truck}
+    expose:
+      - "8080"
+    depends_on:
+      - valhalla
+      - vroom
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - ROUTING_DOMAIN=${ROUTING_DOMAIN:?Set ROUTING_DOMAIN in .env}
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
