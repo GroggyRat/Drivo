@@ -4,8 +4,8 @@ import android.content.Context
 import com.stadiamaps.ferrostar.core.AndroidSystemLocationProvider
 import com.stadiamaps.ferrostar.core.AndroidTtsObserver
 import com.stadiamaps.ferrostar.core.FerrostarCore
+import com.stadiamaps.ferrostar.composeui.notification.DefaultForegroundNotificationBuilder
 import com.stadiamaps.ferrostar.core.service.FerrostarForegroundServiceManager
-import com.stadiamaps.ferrostar.core.service.ForegroundServiceManager
 import fj.kaitech.drivo.BuildConfig
 import fj.kaitech.drivo.DrivoApp
 import io.github.jan.supabase.auth.auth
@@ -51,7 +51,7 @@ object Navigation {
             profile = "truck",
             httpClient = http,
             locationProvider = AndroidSystemLocationProvider(context),
-            foregroundServiceManager = FerrostarForegroundServiceManager(context) as ForegroundServiceManager,
+            foregroundServiceManager = FerrostarForegroundServiceManager(context, DefaultForegroundNotificationBuilder(context)),
             navigationControllerConfig = NavigationControllerConfig(
                 WaypointAdvanceMode.WaypointWithinRange(50.0),
                 StepAdvanceMode.RelativeLineStringDistance(minimumHorizontalAccuracy = 25U, specialAdvanceConditions = null),

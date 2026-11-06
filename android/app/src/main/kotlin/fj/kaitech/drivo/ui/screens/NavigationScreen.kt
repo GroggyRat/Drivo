@@ -107,7 +107,7 @@ fun NavigationScreen(vm: MainViewModel, nav: NavController, stopId: String) {
         Row(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SecondaryButton(if (muted) "Unmute voice" else "Mute voice", {
                 muted = !muted
-                Navigation.tts?.isMuted = muted
+                Navigation.tts?.setMuted(muted)
             })
             SecondaryButton("Arrived", { nav.navigate("arrived/$stopId") })
         }

@@ -1,5 +1,8 @@
-// Android plugins are declared in app/build.gradle.kts, so :core builds on
-// machines without the Android SDK or Google's Maven repository.
 plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.ksp) apply false
 }

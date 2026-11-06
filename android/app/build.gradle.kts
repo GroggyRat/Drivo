@@ -1,9 +1,9 @@
 plugins {
-    id("com.android.application") version "8.7.3"
-    id("org.jetbrains.kotlin.android") version "2.1.0"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.0"
-    id("com.google.devtools.ksp") version "2.1.0-1.0.29"
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -34,6 +34,8 @@ android {
         buildConfig = true
     }
     compileOptions {
+        // Ferrostar needs java.time and friends on older Android versions.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -41,6 +43,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation(project(":core"))
 
     implementation(platform(libs.compose.bom))
