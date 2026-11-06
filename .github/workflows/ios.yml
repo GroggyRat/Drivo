@@ -21,8 +21,20 @@ jobs:
         run: brew install xcodegen && xcodegen generate
       - name: Build for the iOS Simulator
         run: |
+          set -o pipefail
           xcodebuild -project Drivo.xcodeproj -scheme Drivo \
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation -skipMacroValidation \
-            CODE_SIGNING_ALLOWED=NO build | tail -200
-          exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/build.log" 2>&1 && status=0 || status=$?
+          echo "::group::Errors"
+          grep -nE "error:" -A4 "$RUNNER_TEMP/build.log" | grep -v "^--$" | head -400 || true
+          echo "::endgroup::"
+          grep -E "\*\* BUILD (SUCCEEDED|FAILED)" "$RUNNER_TEMP/build.log" || tail -50 "$RUNNER_TEMP/build.log"
+          exit $status
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ${{ runner.temp }}/build.log
+          if-no-files-found: ignore
