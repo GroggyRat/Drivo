@@ -1,3 +1,4 @@
+import CoreLocation
 import DrivoCore
 import FerrostarCore
 import FerrostarCoreFFI
@@ -29,6 +30,8 @@ struct NavigateView: View {
                 styleURL: Config.mapStyleURL,
                 camera: $camera,
                 navigationState: core.state,
+                isMuted: muted,
+                onTapMute: toggleMute,
                 onTapExit: { core.stopNavigation(); dismiss() }
             )
             VStack(alignment: .leading, spacing: 8) {
@@ -44,10 +47,7 @@ struct NavigateView: View {
                     }
                     Spacer()
                     VStack(spacing: 8) {
-                        SecondaryButton(title: muted ? "Unmute voice" : "Mute voice") {
-                            muted.toggle()
-                            if Navigation.speech.isMuted != muted { Navigation.speech.toggleMute() }
-                        }
+                        SecondaryButton(title: muted ? "Unmute voice" : "Mute voice", action: toggleMute)
                         NavigationLink { ArrivedView(stopId: stopId) } label: {
                             Text("Arrived").font(.drivoLabel).frame(maxWidth: .infinity, minHeight: 48).foregroundStyle(DrivoColor.ink)
                                 .background(.white, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(DrivoColor.line))
@@ -68,6 +68,12 @@ struct NavigateView: View {
             }
         }
         .onDisappear { tracker.onFix = nil }
+    }
+
+    /// Ferrostar's own mute button and ours both land here.
+    private func toggleMute() {
+        muted.toggle()
+        if Navigation.speech.isMuted != muted { Navigation.speech.toggleMute() }
     }
 
     private func start(_ stop: Stop?) async {

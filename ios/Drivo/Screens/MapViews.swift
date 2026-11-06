@@ -1,3 +1,4 @@
+import CoreLocation
 import DrivoCore
 import MapLibre
 import SwiftUI
