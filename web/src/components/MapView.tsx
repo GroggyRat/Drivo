@@ -97,6 +97,7 @@ export default function MapView({
   fitKey,
   onMapClick,
   ariaLabel = "Map",
+  follow,
 }: {
   markers?: MapMarker[];
   lines?: MapLine[];
@@ -105,6 +106,8 @@ export default function MapView({
   fitKey?: string;
   onMapClick?: (position: LngLat) => void;
   ariaLabel?: string;
+  /** Keep the map centred on this position (driver view), zoomed in. */
+  follow?: LngLat | null;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -112,9 +115,11 @@ export default function MapView({
   const loaded = useRef(false);
   const clickRef = useRef(onMapClick);
   const latest = useRef({ markers, lines });
+  const followRef = useRef(follow);
   useEffect(() => {
     clickRef.current = onMapClick;
     latest.current = { markers, lines };
+    followRef.current = follow;
   });
 
   useEffect(() => {
@@ -136,7 +141,8 @@ export default function MapView({
     m.on("load", () => {
       loaded.current = true;
       draw(m, latest.current.lines);
-      fit(m, latest.current.markers, latest.current.lines);
+      if (followRef.current) m.jumpTo({ center: [fijiLng(followRef.current[0]), followRef.current[1]], zoom: 16 });
+      else fit(m, latest.current.markers, latest.current.lines);
     });
     map.current = m;
     // Keep the canvas the size of its container as the layout settles.
@@ -168,6 +174,14 @@ export default function MapView({
     const m = map.current;
     if (m && loaded.current) fit(m, latest.current.markers, latest.current.lines);
   }, [fitKey]);
+
+  const followKey = follow ? `${follow[0].toFixed(5)},${follow[1].toFixed(5)}` : "";
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded.current || !followRef.current) return;
+    const [lon, lat] = followRef.current;
+    m.easeTo({ center: [fijiLng(lon), lat], zoom: Math.max(m.getZoom(), 15), duration: 800 });
+  }, [followKey]);
 
   return <div ref={container} role="region" aria-label={ariaLabel} style={{ height }} className="w-full overflow-hidden rounded-[var(--radius-card)] border border-line" />;
 }

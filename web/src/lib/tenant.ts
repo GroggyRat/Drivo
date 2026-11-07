@@ -70,7 +70,11 @@ export type ManagerContext = Context & { tenant: Tenant; role: Role; active: Mem
 /** For pages for Owners, Admins and Dispatchers. */
 export async function requireManager(): Promise<ManagerContext> {
   const ctx = await getContext();
-  if (!ctx.isManager || !ctx.tenant) redirect(ctx.isPlatformAdmin ? "/platform" : "/no-access");
+  if (!ctx.isManager || !ctx.tenant) {
+    if (ctx.isPlatformAdmin) redirect("/platform");
+    // Drivers use the app on their phone, or the driver page in the browser.
+    redirect(ctx.memberships.some((m) => m.role === "driver") ? "/driver" : "/no-access");
+  }
   return ctx as ManagerContext;
 }
 
