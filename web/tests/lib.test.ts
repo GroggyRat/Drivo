@@ -4,6 +4,7 @@ import { formatDate, formatDistance, formatDuration, formatTime, todayIn } from 
 import { estimateFuel, fuelFormula } from "@/lib/fuel";
 import { boundsOf, haversine } from "@/lib/geo";
 import { linkSecret, sign, signedHeaders, verify } from "@/lib/hmac";
+import { estimateKmh, type SpeedSample } from "@/app/driver/navigation";
 import { buildOption, EstimateRoutingProvider, orderStops } from "@/lib/routing/estimate";
 
 describe("webhook signatures", () => {
@@ -102,5 +103,31 @@ describe("formatting", () => {
     expect(formatDistance(850)).toBe("850 m");
     expect(formatDistance(12_340)).toBe("12 km");
     expect(formatDuration(5400)).toBe("1 h 30 min");
+  });
+});
+
+describe("estimateKmh", () => {
+  // About 111 m per 0.001 degree of latitude.
+  const at = (lat: number, t: number, accuracy = 8) => ({ position: [178.45, lat] as [number, number], at: t, accuracy });
+
+  it("uses the phone's own speed when it gives one", () => {
+    const recent: SpeedSample[] = [];
+    expect(estimateKmh(recent, at(-18.1, 0), 13.9)).toBeCloseTo(50, 0);
+  });
+
+  it("works out speed from distance over time when the phone gives none", () => {
+    const recent: SpeedSample[] = [];
+    expect(estimateKmh(recent, at(-18.1, 0), null)).toBeNull();
+    estimateKmh(recent, at(-18.0993, 2500), null);
+    // 0.0014 degrees (about 156 m) in 10 s is about 56 km/h.
+    expect(estimateKmh(recent, at(-18.0986, 10_000), null)).toBeGreaterThan(50);
+    expect(estimateKmh(recent, at(-18.0986, 10_000), null)).toBeLessThan(62);
+  });
+
+  it("treats GPS jitter as standing still and skips rough fixes", () => {
+    const recent: SpeedSample[] = [];
+    estimateKmh(recent, at(-18.1, 0), null);
+    expect(estimateKmh(recent, at(-18.10003, 5000), null)).toBe(0);
+    expect(estimateKmh(recent, at(-18.09, 6000, 120), null)).toBeNull();
   });
 });

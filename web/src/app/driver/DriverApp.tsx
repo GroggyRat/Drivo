@@ -7,7 +7,7 @@ import { LogoMark } from "@/components/Logo";
 import { formatDistance, formatTime } from "@/lib/format";
 import { haversine, type LngLat } from "@/lib/geo";
 import { getBrowserClient } from "@/lib/supabase/client";
-import { decodePolyline6, nextManeuver, type NavStep } from "./navigation";
+import { decodePolyline6, estimateKmh, nextManeuver, type NavStep, type SpeedSample } from "./navigation";
 import { ProofForm } from "./ProofForm";
 
 type Stop = {
@@ -29,7 +29,7 @@ type Route = {
   route_stops: Stop[];
 };
 type Shift = { clock_in_here: boolean; tracking: boolean; shift: { id: string; source: string; started_at: string } | null };
-type Fix = { position: LngLat; accuracy: number; speedMps: number | null; heading: number | null; at: number };
+type Fix = { position: LngLat; accuracy: number; speedMps: number | null; heading: number | null; at: number; kmh: number };
 type Nav = { stopId: string; line: LngLat[]; steps: NavStep[]; fetchedAt: number };
 
 const ROUTE_COLUMNS =
@@ -47,6 +47,11 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [fix, setFix] = useState<Fix | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [nav, setNav] = useState<Nav | null>(null);
   const [follow, setFollow] = useState(true);
@@ -101,13 +106,21 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
       setGeoError("This browser cannot share location.");
       return;
     }
+    const recent: SpeedSample[] = [];
+    let smoothed = 0;
+    let lastAt = 0;
     const id = navigator.geolocation.watchPosition(
       (p) => {
         setGeoError(null);
-        setFix({ position: [p.coords.longitude, p.coords.latitude], accuracy: p.coords.accuracy, speedMps: p.coords.speed, heading: p.coords.heading, at: p.timestamp });
+        if (p.timestamp <= lastAt) return; // a repeated, cached fix
+        lastAt = p.timestamp;
+        const position: LngLat = [p.coords.longitude, p.coords.latitude];
+        const kmh = estimateKmh(recent, { position, at: p.timestamp, accuracy: p.coords.accuracy }, p.coords.speed);
+        if (kmh != null) smoothed = kmh < 3 ? 0 : smoothed === 0 ? kmh : smoothed * 0.5 + kmh * 0.5;
+        setFix({ position, accuracy: p.coords.accuracy, speedMps: p.coords.speed, heading: p.coords.heading, at: p.timestamp, kmh: smoothed });
       },
       (e) => setGeoError(e.code === e.PERMISSION_DENIED ? "Location is turned off for this website. In Settings, Privacy and Security, Location Services, Safari Websites, choose While Using the App." : "Waiting for a GPS signal."),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
     );
     return () => navigator.geolocation.clearWatch(id);
   }, []);
@@ -135,7 +148,6 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
   const channel = useRef<RealtimeChannel | null>(null);
   const buffer = useRef<(number | null)[][]>([]);
   const lastBroadcast = useRef(0);
-  const lastFix = useRef<Fix | null>(null);
   useEffect(() => {
     if (!tracking) return;
     const ch = supabase.channel(`tenant:${tenantId}`);
@@ -147,18 +159,10 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
     };
   }, [tracking, supabase, tenantId]);
 
-  const speedKmh = (f: Fix, prev: Fix | null) => {
-    if (f.speedMps != null && f.speedMps >= 0) return f.speedMps * 3.6;
-    if (!prev || f.at <= prev.at) return 0;
-    return (haversine(prev.position, f.position) / ((f.at - prev.at) / 1000)) * 3.6;
-  };
-
   useEffect(() => {
     if (!fix || !tracking) return;
-    const prev = lastFix.current;
-    lastFix.current = fix;
     if (fix.accuracy > 100) return;
-    const kmh = speedKmh(fix, prev);
+    const kmh = fix.kmh;
     buffer.current.push([fix.at, +fix.position[0].toFixed(6), +fix.position[1].toFixed(6), Math.round(fix.accuracy), +(kmh / 3.6).toFixed(2), fix.heading != null ? Math.round(fix.heading) : null]);
     if (fix.at - lastBroadcast.current >= 3000 && channel.current) {
       lastBroadcast.current = fix.at;
@@ -385,7 +389,7 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
             {fix && (
               <div className="absolute bottom-3 left-3 flex gap-2">
                 <button className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm" onClick={() => setFollow((f) => !f)}>{follow ? "Show whole run" : "Follow me"}</button>
-                <span className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium tabular-nums shadow-sm">{Math.round(speedKmh(fix, null))} km/h</span>
+                <span className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium tabular-nums shadow-sm">{now - fix.at > 15000 ? "No GPS" : `${Math.round(fix.kmh)} km/h`}</span>
               </div>
             )}
           </section>

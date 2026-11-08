@@ -41,3 +41,23 @@ export function nextManeuver(steps: NavStep[], at: LngLat): { index: number; ins
   const last = steps[steps.length - 1];
   return { index: steps.length - 1, instruction: last.instruction, type: last.type, modifier: last.modifier, distanceM: haversine(at, last.location) };
 }
+
+export type SpeedSample = { position: LngLat; at: number; accuracy: number };
+
+/**
+ * Speed in km/h for a new GPS fix, or null when the fix is too rough to say.
+ * Uses the phone's own speed when it gives one (Safari often does not), else
+ * the distance travelled over the last 4 to 12 seconds. Movement smaller than
+ * the GPS error counts as standing still. `recent` is kept by the caller.
+ */
+export function estimateKmh(recent: SpeedSample[], cur: SpeedSample, deviceSpeedMps: number | null): number | null {
+  if (!(cur.accuracy <= 50)) return null;
+  recent.push(cur);
+  while (recent.length && cur.at - recent[0].at > 12_000) recent.shift();
+  if (deviceSpeedMps != null && Number.isFinite(deviceSpeedMps) && deviceSpeedMps >= 0) return Math.min(deviceSpeedMps * 3.6, 180);
+  const from = recent.find((s) => cur.at - s.at >= 4000);
+  if (!from) return null;
+  const d = haversine(from.position, cur.position);
+  if (d < Math.max(5, (from.accuracy + cur.accuracy) / 2)) return 0;
+  return Math.min((d / ((cur.at - from.at) / 1000)) * 3.6, 180);
+}
