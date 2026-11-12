@@ -19,8 +19,8 @@ jobs:
       - name: App settings
         run: |
           {
-            echo 'DRIVO_SUPABASE_URL = '
-            echo 'DRIVO_SUPABASE_KEY = '
+            echo 'DRIVO_SUPABASE_URL = https:/$()/rnlpasfcdygeqxbrbput.supabase.co'
+            echo 'DRIVO_SUPABASE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubHBhc2ZjZHlnZXF4YnJicHV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MjkyMjYsImV4cCI6MjEwOTUwNTIyNn0.C7RW5n8jSgV_too7zvEEXd_Ij9RGJwIKAYKv1LgKANU'
             echo 'DRIVO_WEB_URL = https:/$()/drivo-blond.vercel.app'
           } > Config.local.xcconfig
       - name: Generate the Xcode project
