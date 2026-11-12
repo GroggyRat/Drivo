@@ -1,0 +1,48 @@
+name: iOS unsigned IPA
+
+# Builds the driver app for iPhone without signing and keeps it as an .ipa.
+# It cannot be installed directly: sign it with your own Apple ID using a
+# sideloading tool (for example Sideloadly), or use the TestFlight workflow.
+# The values below are the publishable ones that ship inside every app.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: App settings
+        run: |
+          {
+            echo 'DRIVO_SUPABASE_URL = '
+            echo 'DRIVO_SUPABASE_KEY = '
+            echo 'DRIVO_WEB_URL = https:/$()/drivo-blond.vercel.app'
+          } > Config.local.xcconfig
+      - name: Generate the Xcode project
+        run: brew install xcodegen && xcodegen generate
+      - name: Build for iPhone, unsigned
+        run: |
+          set -o pipefail
+          xcodebuild -project Drivo.xcodeproj -scheme Drivo -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/dd" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > "$RUNNER_TEMP/build.log" 2>&1 && status=0 || status=$?
+          grep -nE "error:" -A4 "$RUNNER_TEMP/build.log" | head -200 || true
+          grep -E "\*\* BUILD (SUCCEEDED|FAILED)" "$RUNNER_TEMP/build.log" || tail -50 "$RUNNER_TEMP/build.log"
+          exit $status
+      - name: Package the .ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/Drivo.app" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa" && zip -qry Drivo-unsigned.ipa Payload && ls -lh Drivo-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drivo-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/Drivo-unsigned.ipa
