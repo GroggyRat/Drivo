@@ -1,13 +1,11 @@
 -- Road alerts: an add-on the platform turns on per company. Drivers report a
--- hazard, a police checkpoint or a speed camera with two taps, and every
--- driver of every company with the add-on is warned as they approach it.
+-- hazard, a police checkpoint or a speed camera with two taps, and the
+-- company's other drivers are warned as they approach it.
 --
--- Sharing across companies is the point (one company's drivers are too few
--- to cover the road), so it is the one place where rows cross tenants, and
--- it is kept narrow:
---   * the table is readable only by the reporting company's managers;
---   * everyone else reads through road_alerts_near, which returns the kind,
---     the place and the time, never who reported it or which company;
+-- Alerts stay inside the company, like everything else:
+--   * the table is readable only by the company's managers;
+--   * drivers read through road_alerts_near, which returns their own
+--     company's open alerts, with the kind, the place and the time;
 --   * writes go only through report_road_alert and vote_road_alert.
 
 alter table public.tenants add column road_alerts_enabled boolean not null default false;
@@ -27,8 +25,8 @@ create table public.road_alerts (
   expires_at timestamptz not null,
   -- Set when drivers say it is gone, or the reporter takes it back.
   ended_at timestamptz,
-  -- People who said "Still there" and "Not there". They can be from other
-  -- companies, so these columns are not readable through the API.
+  -- People who said "Still there" and "Not there". Not readable through the
+  -- API; the functions return counts.
   confirmed_by uuid[] not null default '{}',
   denied_by uuid[] not null default '{}',
   unique (id, tenant_id),
@@ -121,7 +119,7 @@ begin
 
   select a.* into v_alert
   from public.road_alerts a
-  where a.ended_at is null and a.expires_at > now() and a.kind = p_kind
+  where a.tenant_id = v_tenant and a.ended_at is null and a.expires_at > now() and a.kind = p_kind
     and extensions.st_dwithin(a.point, v_point, 200)
   order by extensions.st_distance(a.point, v_point)
   limit 1
@@ -167,8 +165,10 @@ begin
   if app.road_alerts_tenant(p_tenant_id) is null or p_still_there is null then
     raise exception 'Not allowed' using errcode = '42501';
   end if;
+  -- Only an alert of a company the caller belongs to (with the add-on).
   select a.* into v_alert from public.road_alerts a
   where a.id = p_alert_id and a.ended_at is null and a.expires_at > now()
+    and app.road_alerts_tenant(a.tenant_id) is not null
   for update;
   if not found then
     return jsonb_build_object('id', p_alert_id, 'active', false);
@@ -199,8 +199,8 @@ begin
 end;
 $$;
 
--- Open alerts around a point, nearest first, from every company with the
--- add-on. No reporter and no company in the result.
+-- The company's open alerts around a point, nearest first. No reporter in
+-- the result.
 create or replace function public.road_alerts_near(
   p_lon double precision,
   p_lat double precision,
@@ -224,15 +224,16 @@ set search_path = ''
 as $$
 declare
   v_point extensions.geography := app.make_point(p_lon, p_lat);
+  v_tenant uuid := app.road_alerts_tenant(p_tenant_id);
 begin
-  if app.road_alerts_tenant(p_tenant_id) is null then
+  if v_tenant is null then
     raise exception 'Not allowed' using errcode = '42501';
   end if;
   return query
   select a.id, a.kind, a.lon, a.lat, a.created_at, cardinality(a.confirmed_by),
     a.reported_by = auth.uid(), auth.uid() = any (a.confirmed_by || a.denied_by)
   from public.road_alerts a
-  where a.ended_at is null and a.expires_at > now()
+  where a.tenant_id = v_tenant and a.ended_at is null and a.expires_at > now()
     and extensions.st_dwithin(a.point, v_point, least(greatest(coalesce(p_radius_m, 50000), 100), 2000000))
   order by extensions.st_distance(a.point, v_point)
   limit 200;

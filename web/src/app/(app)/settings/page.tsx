@@ -274,7 +274,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
           </Card>
           <Card title="Road alerts">
             <p>{ctx.tenant.road_alerts_enabled ? <Badge tone="green" icon>On</Badge> : <Badge tone="grey">Off</Badge>}</p>
-            <p className="mt-2 text-sm text-muted">An add-on at {ROAD_ALERTS_PRICE}. Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Reports are shared with other companies that have the add-on, without your drivers&apos; names or your company&apos;s. KaiTech turns it on for a company on request.</p>
+            <p className="mt-2 text-sm text-muted">An add-on at {ROAD_ALERTS_PRICE}. Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Only your own drivers see them. KaiTech turns it on for a company on request.</p>
           </Card>
           <Card title="KaiWorkforce">
             <p>{ctx.tenant.kaiworkforce_enabled ? <Badge tone="green" icon>Connected</Badge> : <Badge tone="grey">Not connected</Badge>}</p>

@@ -85,9 +85,9 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
               <p className="font-medium">Road alerts</p>
               <p className="flex items-center gap-2 text-sm">{ROAD_ALERTS_PRICE} {t.road_alerts_enabled ? <Badge tone="green" icon>On</Badge> : <Badge tone="grey">Off</Badge>}</p>
             </div>
-            <p className="text-sm text-muted">Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Reports are shared between every company with this add-on, without the driver&apos;s or the company&apos;s name. Drivo does not bill it for you: add it to the company&apos;s invoice.</p>
+            <p className="text-sm text-muted">Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Reports stay inside the company. Drivo does not bill it for you: add it to the company&apos;s invoice.</p>
             {t.road_alerts_enabled ? (
-              <ConfirmSubmit label="Turn off road alerts" title={`Turn off road alerts for ${t.name}?`} message="Its drivers will no longer see or send road alerts. Reports already made stay up for other companies until they expire." confirmLabel="Turn off" className="btn-secondary" />
+              <ConfirmSubmit label="Turn off road alerts" title={`Turn off road alerts for ${t.name}?`} message="Its drivers will no longer see or send road alerts. Reports already made are kept but hidden." confirmLabel="Turn off" className="btn-secondary" />
             ) : (
               <SubmitButton pendingLabel="Turning on">Turn on road alerts</SubmitButton>
             )}

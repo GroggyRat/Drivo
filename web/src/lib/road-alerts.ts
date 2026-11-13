@@ -1,7 +1,7 @@
 import type { MapMarker } from "@/components/MapView";
 
-// Road alerts: an add-on the platform turns on per company. Reports are
-// shared between every company that has it, without the reporter's name.
+// Road alerts: an add-on the platform turns on per company. Reports stay
+// inside the company and drivers do not see who made them.
 
 export type RoadAlertKind = "hazard" | "police" | "speed_camera";
 

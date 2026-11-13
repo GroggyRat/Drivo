@@ -28,7 +28,7 @@ export function LiveOps({ initial, tenantId, timeZone, roadAlerts }: { initial: 
   const [pending, startTransition] = useTransition();
   const [road, setRoad] = useState<RoadAlert[]>([]);
 
-  // Road alerts reported by drivers (the add-on), across Fiji.
+  // Road alerts reported by the company's drivers (the add-on), across Fiji.
   useEffect(() => {
     if (!roadAlerts) return;
     const load = async () => {
