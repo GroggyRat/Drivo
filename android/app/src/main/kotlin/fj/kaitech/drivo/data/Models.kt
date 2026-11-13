@@ -8,7 +8,35 @@ data class Membership(
     @SerialName("tenant_id") val tenantId: String,
     val role: String,
     @SerialName("full_name") val fullName: String,
-)
+    val tenant: MemberTenant? = null,
+) {
+    /** The road alerts add-on, turned on per company by KaiTech. */
+    val roadAlerts get() = tenant?.roadAlertsEnabled == true
+}
+
+@Serializable
+data class MemberTenant(@SerialName("road_alerts_enabled") val roadAlertsEnabled: Boolean = false)
+
+/** A hazard, police checkpoint or speed camera reported by a driver of the same company. */
+@Serializable
+data class RoadAlert(
+    val id: String,
+    /** hazard, police or speed_camera */
+    val kind: String,
+    val lon: Double = 0.0,
+    val lat: Double = 0.0,
+    @SerialName("reported_at") val reportedAt: String? = null,
+    val confirmations: Int = 0,
+    val mine: Boolean = false,
+    val voted: Boolean = false,
+    val active: Boolean = true,
+) {
+    val label get() = when (kind) {
+        "police" -> "Police checkpoint"
+        "speed_camera" -> "Speed camera"
+        else -> "Hazard"
+    }
+}
 
 @Serializable
 data class StopLocation(val id: String, val name: String, val lon: Double, val lat: Double, @SerialName("landmark_directions") val directions: String? = null)

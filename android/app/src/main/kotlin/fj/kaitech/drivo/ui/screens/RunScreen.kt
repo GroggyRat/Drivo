@@ -71,6 +71,7 @@ fun RunScreen(vm: MainViewModel, nav: NavController) {
                 }
             }
         }
+        item { RoadAlertsPanel(vm) }
         if (route == null) {
             item { Card { Text(if (ui.loading) "Loading your run" else "No route sent to you for today.", color = Drivo.Muted) } }
             return@LazyColumn

@@ -50,7 +50,7 @@ class DrivoRepository(private val context: Context, val supabase: SupabaseClient
     suspend fun loadMembership(): Membership? {
         val id = userId ?: return null
         membership = supabase.from("memberships")
-            .select(Columns.list("tenant_id", "role", "full_name")) {
+            .select(Columns.raw("tenant_id, role, full_name, tenant:tenants(road_alerts_enabled)")) {
                 filter {
                     eq("user_id", id)
                     eq("role", "driver")
@@ -100,6 +100,26 @@ class DrivoRepository(private val context: Context, val supabase: SupabaseClient
     suspend fun clockIn(): ShiftInfo = supabase.postgrest.rpc("clock_in", tenantArg()).decodeAs()
 
     suspend fun clockOut(): ShiftInfo = supabase.postgrest.rpc("clock_out", tenantArg()).decodeAs()
+
+    // Road alerts (the add-on). All three need signal: an alert is only useful now.
+    suspend fun roadAlertsNear(lon: Double, lat: Double): List<RoadAlert> =
+        supabase.postgrest.rpc("road_alerts_near", buildJsonObject {
+            put("p_lon", lon); put("p_lat", lat); put("p_radius_m", 30000)
+            membership?.let { put("p_tenant_id", it.tenantId) }
+        }).decodeList()
+
+    suspend fun reportRoadAlert(kind: String, lon: Double, lat: Double): RoadAlert =
+        supabase.postgrest.rpc("report_road_alert", buildJsonObject {
+            put("p_kind", kind); put("p_lon", lon); put("p_lat", lat)
+            membership?.let { put("p_tenant_id", it.tenantId) }
+        }).decodeAs()
+
+    suspend fun voteRoadAlert(id: String, stillThere: Boolean) {
+        supabase.postgrest.rpc("vote_road_alert", buildJsonObject {
+            put("p_alert_id", id); put("p_still_there", stillThere)
+            membership?.let { put("p_tenant_id", it.tenantId) }
+        })
+    }
 
     /** A five-minute link to an order's invoice PDF. Needs signal. */
     suspend fun invoiceUrl(path: String): String =

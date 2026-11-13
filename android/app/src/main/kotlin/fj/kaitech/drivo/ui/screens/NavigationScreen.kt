@@ -98,6 +98,7 @@ fun NavigationScreen(vm: MainViewModel, nav: NavController, stopId: String) {
             onTapExit = { scope.launch { core.stopNavigation() }; nav.popBackStack() },
         )
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RoadAlertsPanel(vm, Modifier.fillMaxWidth(0.62f))
             SpeedReadout(tracking.speedKmh, tracking.limitKmh, tracking.alert)
             following?.let {
                 Text("Then: ${it.location.name}", color = Drivo.Muted,

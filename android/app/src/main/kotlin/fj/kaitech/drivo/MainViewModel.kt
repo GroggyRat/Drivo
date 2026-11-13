@@ -5,6 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fj.kaitech.drivo.data.PinInput
 import fj.kaitech.drivo.data.ProofInput
+import fj.kaitech.drivo.core.geo.Geo
+import fj.kaitech.drivo.core.geo.LngLat
+import fj.kaitech.drivo.data.RoadAlert
 import fj.kaitech.drivo.data.Route
 import fj.kaitech.drivo.data.ShiftInfo
 import fj.kaitech.drivo.data.Stop
@@ -14,6 +17,8 @@ import android.content.Intent
 import android.net.Uri
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
+import android.speech.tts.TextToSpeech
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -33,6 +38,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val message: String? = null,
         val shift: ShiftInfo? = null,
         val clocking: Boolean = false,
+        /** The company has the road alerts add-on. */
+        val roadAlertsOn: Boolean = false,
+        val roadAlerts: List<RoadAlert> = emptyList(),
+        /** The driver's own report just sent, for Undo. */
+        val reported: RoadAlert? = null,
+        val roadBusy: Boolean = false,
     ) {
         val active get() = routes.firstOrNull { it.status == "in_progress" } ?: routes.firstOrNull { it.status == "sent" }
     }
@@ -74,8 +85,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         state.value = state.value.copy(loading = true)
         val m = repo.membership ?: repo.loadMembership()
         val (routes, online) = repo.todaysRoutes()
-        state.value = state.value.copy(loading = false, routes = routes, online = online, name = m?.fullName ?: "")
+        state.value = state.value.copy(loading = false, routes = routes, online = online, name = m?.fullName ?: "", roadAlertsOn = m?.roadAlerts == true)
         if (m != null) listenForShifts(m.tenantId)
+        if (m?.roadAlerts == true) watchRoadAlerts()
         repo.myShift()?.let { applyShift(it) }
     }
 
@@ -122,6 +134,77 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 else TrackingService.stop(getApplication())
             }
         }
+    }
+
+    // ---- Road alerts: hazards, police checkpoints and speed cameras from the company's drivers. ----
+    private var watchingRoad = false
+    private val warned = mutableSetOf<String>()
+    private var tts: TextToSpeech? = null
+
+    /** Where the driver is: the tracking fix on shift. Off shift there is none, and nothing is loaded. */
+    private fun here(): LngLat? = TrackingState.flow.value.lastFix?.position
+
+    /** Reloads nearby alerts every 30 seconds, and warns once for each as the driver comes within 600 m. */
+    private fun watchRoadAlerts() {
+        if (watchingRoad) return
+        watchingRoad = true
+        tts = TextToSpeech(getApplication()) {}
+        viewModelScope.launch {
+            var tick = 0
+            while (true) {
+                if (!state.value.signedIn || !state.value.roadAlertsOn) break
+                if (tick % 6 == 0) loadRoadAlerts()
+                roadAlertAhead()?.let { (alert, metres) ->
+                    if (warned.add(alert.id)) {
+                        tts?.speak("${alert.label} reported, ${maxOf(50, metres / 50 * 50)} metres away.", TextToSpeech.QUEUE_ADD, null, alert.id)
+                    }
+                }
+                tick++
+                delay(5_000)
+            }
+            watchingRoad = false
+        }
+    }
+
+    private suspend fun loadRoadAlerts() {
+        val p = here() ?: return
+        runCatching { repo.roadAlertsNear(p.lon, p.lat) }.onSuccess { state.value = state.value.copy(roadAlerts = it) }
+    }
+
+    /** The nearest alert within 600 m that someone else reported, with the distance in metres. */
+    fun roadAlertAhead(): Pair<RoadAlert, Int>? {
+        val p = here() ?: return null
+        return state.value.roadAlerts.filter { !it.mine }
+            .map { it to Geo.distance(p, LngLat(it.lon, it.lat)).toInt() }
+            .filter { it.second <= 600 }
+            .minByOrNull { it.second }
+    }
+
+    fun reportRoadAlert(kind: String, lon: Double, lat: Double) = viewModelScope.launch {
+        state.value = state.value.copy(roadBusy = true, message = null)
+        runCatching { repo.reportRoadAlert(kind, lon, lat) }
+            .onSuccess { state.value = state.value.copy(reported = it) }
+            .onFailure { state.value = state.value.copy(message = "Could not send the report. Check your signal and try again.") }
+        loadRoadAlerts()
+        state.value = state.value.copy(roadBusy = false)
+    }
+
+    fun voteRoadAlert(id: String, stillThere: Boolean) = viewModelScope.launch {
+        state.value = state.value.copy(roadBusy = true)
+        runCatching { repo.voteRoadAlert(id, stillThere) }
+            .onFailure { state.value = state.value.copy(message = "Could not send your answer. Check your signal and try again.") }
+        if (state.value.reported?.id == id) state.value = state.value.copy(reported = null)
+        loadRoadAlerts()
+        state.value = state.value.copy(roadBusy = false)
+    }
+
+    fun clearReported() {
+        state.value = state.value.copy(reported = null)
+    }
+
+    override fun onCleared() {
+        tts?.shutdown()
+        super.onCleared()
     }
 
     fun startRoute(route: Route) = viewModelScope.launch {

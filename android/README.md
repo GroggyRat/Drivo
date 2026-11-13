@@ -22,6 +22,7 @@ Bottom tabs on every screen: Run, Map, Ledger, Drop pin, Account.
 5. **Proof of delivery**: invoice lines, Delivered in full, photo, signature pad, Received by, and Report a problem or part delivery. Then Complete delivery.
 6. **Drop a pin**: drag the map under the centre pin, then add a name, type, directions and photo. Submit sends it for review.
 7. **Day ledger**: totals, then each delivery marked "Synced" or "Waiting to sync".
+8. **Road alerts** (companies with the add-on): on Today's run and in Navigation, "Report on the road" for a hazard, police checkpoint or speed camera, and a warning with voice within 600 m of one, with "Still there" and "Not there". Alerts load while on shift and show on the Map tab.
 
 ## How tracking works
 

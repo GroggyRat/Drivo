@@ -60,6 +60,10 @@ fun MapScreen(vm: MainViewModel) {
         route?.orderedStops?.forEach { s ->
             map.addMarker(MarkerOptions().position(LatLng(s.location.lat, s.location.lon)).title("${s.sequence}. ${s.location.name}").snippet(stopBadge(s.status).first))
         }
+        // Road alerts loaded so far (the add-on). Tap one for what it is and when it was reported.
+        ui.roadAlerts.forEach { a ->
+            map.addMarker(MarkerOptions().position(LatLng(a.lat, a.lon)).title(a.label).snippet("Reported at ${timeOf(a.reportedAt)}"))
+        }
     }
 }
 
