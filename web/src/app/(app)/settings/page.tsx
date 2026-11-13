@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ConfirmSubmit, SubmitButton } from "@/components/buttons";
 import { Badge, Card, Field, Notice, PageHeader, TableWrap, Tabs } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
+import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
 import { fuelFormula } from "@/lib/fuel";
 import { requireManager } from "@/lib/tenant";
 import { LocationPicker } from "../locations/LocationPicker";
@@ -270,6 +271,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
                 </ul>
               </div>
             )}
+          </Card>
+          <Card title="Road alerts">
+            <p>{ctx.tenant.road_alerts_enabled ? <Badge tone="green" icon>On</Badge> : <Badge tone="grey">Off</Badge>}</p>
+            <p className="mt-2 text-sm text-muted">An add-on at {ROAD_ALERTS_PRICE}. Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Reports are shared with other companies that have the add-on, without your drivers&apos; names or your company&apos;s. KaiTech turns it on for a company on request.</p>
           </Card>
           <Card title="KaiWorkforce">
             <p>{ctx.tenant.kaiworkforce_enabled ? <Badge tone="green" icon>Connected</Badge> : <Badge tone="grey">Not connected</Badge>}</p>

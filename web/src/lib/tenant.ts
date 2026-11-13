@@ -15,6 +15,8 @@ export type Tenant = {
   billzilla_org_id: string | null;
   kaiworkforce_company_id: string | null;
   logo_path: string | null;
+  /** The road alerts add-on, turned on by the platform. */
+  road_alerts_enabled: boolean;
 };
 
 export type Membership = { tenant_id: string; role: Role; full_name: string; tenant: Tenant };
@@ -34,7 +36,7 @@ export async function getContext() {
 
   const { data } = await supabase
     .from("memberships")
-    .select("tenant_id, role, full_name, tenant:tenants(id, name, slug, time_zone, billzilla_enabled, kaiworkforce_enabled, billzilla_org_id, kaiworkforce_company_id, logo_path)")
+    .select("tenant_id, role, full_name, tenant:tenants(id, name, slug, time_zone, billzilla_enabled, kaiworkforce_enabled, billzilla_org_id, kaiworkforce_company_id, logo_path, road_alerts_enabled)")
     .eq("user_id", userId)
     .eq("active", true)
     .order("created_at");

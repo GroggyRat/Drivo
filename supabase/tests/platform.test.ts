@@ -22,7 +22,7 @@ describe("platform functions", () => {
     expect(rows.map((r) => r.slug)).toEqual(["tenant-a", "tenant-b"]);
     expect(rows[0]).toMatchObject({ people: 5, drivers: 2, vehicles: 1, routes_last_30_days: 2, billzilla_linked: false });
     expect(Object.keys(rows[0]).sort()).toEqual(
-      ["billzilla_linked", "created_at", "drivers", "id", "kaiworkforce_linked", "name", "people", "routes_last_30_days", "slug", "status", "vehicles"],
+      ["billzilla_linked", "created_at", "drivers", "id", "kaiworkforce_linked", "name", "people", "road_alerts_enabled", "routes_last_30_days", "slug", "status", "vehicles"],
     );
   });
 
@@ -41,6 +41,11 @@ describe("platform functions", () => {
       slug: "bula-wholesale-ltd", time_zone: "Pacific/Fiji",
       urban_speed_limit_kmh: 50, highway_speed_limit_kmh: 80, currency: "FJD", arrival_radius_m: 50,
     });
+    // Town zones come with it: 50 in central Suva, 80 on the highway past Pacific Harbour.
+    const limit = async (lon: number, lat: number) =>
+      (await client.query("select limit_kmh, zone_name from app.speed_limit_at($1, app.make_point($2, $3))", [id, lon, lat])).rows[0];
+    expect(await limit(178.4419, -18.1416)).toEqual({ limit_kmh: 50, zone_name: "Suva, Lami and Nasinu" });
+    expect(await limit(178.07, -18.24)).toEqual({ limit_kmh: 80, zone_name: null });
   });
 
   it("refuse an unknown time zone", async () => {

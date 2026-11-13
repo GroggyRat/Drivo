@@ -8,7 +8,9 @@ import { formatDistance, formatTime } from "@/lib/format";
 import { haversine, type LngLat } from "@/lib/geo";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { decodePolyline6, estimateKmh, nextManeuver, type NavStep, type SpeedSample } from "./navigation";
+import { ROAD_ALERT_LABEL, roadAlertMarker, type RoadAlertKind } from "@/lib/road-alerts";
 import { ProofForm } from "./ProofForm";
+import { AlertBanner, LimitSign, ReportPanel, nearestAhead, useRoadAlerts } from "./RoadAlerts";
 
 type Stop = {
   id: string;
@@ -40,7 +42,7 @@ const ROUTE_COLUMNS =
 const OPEN = ["scheduled", "arrived"];
 const today = (tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 
-export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }: { userId: string; tenantId: string; tenantName: string; driverName: string; timeZone: string }) {
+export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone, roadAlerts }: { userId: string; tenantId: string; tenantName: string; driverName: string; timeZone: string; roadAlerts: boolean }) {
   const supabase = getBrowserClient();
   const [shift, setShift] = useState<Shift | null>(null);
   const [routes, setRoutes] = useState<Route[] | null>(null);
@@ -58,6 +60,10 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
   const [voice, setVoice] = useState(true);
   const [lastUpload, setLastUpload] = useState<number | null>(null);
   const [online, setOnline] = useState(true);
+  const [limit, setLimit] = useState<number | null>(null);
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState<{ id: string; kind: RoadAlertKind } | null>(null);
+  const [openAlert, setOpenAlert] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [s, r] = await Promise.all([
@@ -269,6 +275,52 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
     if (step.distanceM <= 70) say(`${k}-now`, `${step.instruction}.`);
   }, [step, voice, nav?.fetchedAt]);
 
+  // ---- Speed limit where the driver is (the company's zones and limits). ----
+  const limitAt = useRef<{ position: LngLat; at: number } | null>(null);
+  useEffect(() => {
+    if (!fix || fix.accuracy > 100) return;
+    const last = limitAt.current;
+    if (last && haversine(last.position, fix.position) < 100 && fix.at - last.at < 120_000) return;
+    limitAt.current = { position: fix.position, at: fix.at };
+    void supabase.rpc("speed_limit_at", { p_tenant_id: tenantId, p_lon: fix.position[0], p_lat: fix.position[1] }).then(({ data }) => {
+      const row = (data as { limit_kmh: number }[] | null)?.[0];
+      if (row) setLimit(row.limit_kmh);
+    });
+  }, [fix, supabase, tenantId]);
+
+  // ---- Road alerts: hazards, police checkpoints and speed cameras from other drivers. ----
+  const road = useRoadAlerts(roadAlerts, tenantId, fix?.position ?? null);
+  const ahead = useMemo(() => nearestAhead(road.alerts, fix?.position ?? null), [road.alerts, fix]);
+  const opened = road.alerts.find((a) => a.id === openAlert) ?? null;
+  const warned = useRef(new Set<string>());
+  useEffect(() => {
+    if (!ahead || warned.current.has(ahead.alert.id)) return;
+    warned.current.add(ahead.alert.id);
+    if (voice && "speechSynthesis" in window) {
+      const u = new SpeechSynthesisUtterance(`${ROAD_ALERT_LABEL[ahead.alert.kind]} reported, ${Math.max(50, Math.round(ahead.distanceM / 50) * 50)} metres away.`);
+      u.lang = "en-GB";
+      window.speechSynthesis.speak(u);
+    }
+  }, [ahead, voice]);
+  const reportAlert = async (kind: RoadAlertKind) => {
+    if (!fix) return;
+    setBusy("report");
+    setError(null);
+    const res = await road.report(kind, fix.position);
+    setBusy(null);
+    setReporting(false);
+    if (res.error || !res.alert) setError(res.error ?? "Could not send the report. Check your signal.");
+    else setReported({ id: res.alert.id, kind });
+  };
+  const voteAlert = async (id: string, stillThere: boolean) => {
+    setBusy("vote");
+    const res = await road.vote(id, stillThere);
+    setBusy(null);
+    if (res.error) setError(res.error);
+    if (!stillThere) setOpenAlert(null);
+    if (reported?.id === id) setReported(null);
+  };
+
   // ---- Actions ----
   const act = async (label: string, fn: () => PromiseLike<{ error: { message: string } | null }>) => {
     setBusy(label);
@@ -305,15 +357,19 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
       kind: OPEN.includes(s.status) ? (s.id === next?.id ? "selected" : "stop") : "done",
     }));
     if (route) list.push({ id: "depot", position: [route.depot.lon, route.depot.lat], text: "D", kind: "depot", label: route.depot.name });
+    for (const a of road.alerts) {
+      list.push(roadAlertMarker(a, `${ROAD_ALERT_LABEL[a.kind]}, reported ${formatTime(a.reported_at, timeZone)}`, () => setOpenAlert(a.id)));
+    }
     if (fix) list.push({ id: "me", position: fix.position, kind: "vehicle", heading: fix.heading, label: "You" });
     return list;
-  }, [stops, route, fix, next?.id]);
+  }, [stops, route, fix, next?.id, road.alerts, timeZone]);
   const lines: MapLine[] = useMemo(() => {
     if (nav && nav.stopId === navStopId) return [{ id: "nav", coordinates: nav.line, width: 6 }];
     if (route?.geometry_geojson) return [{ id: "route", coordinates: route.geometry_geojson.coordinates, opacity: 0.5 }];
     return [];
   }, [nav, navStopId, route]);
 
+  const gpsLive = fix != null && now - fix.at <= 15000;
   const done = stops.filter((s) => !OPEN.includes(s.status)).length;
   const toNext = next && fix ? haversine(fix.position, [next.location.lon, next.location.lat]) : null;
 
@@ -382,18 +438,47 @@ export function DriverApp({ userId, tenantId, tenantName, driverName, timeZone }
           </section>
         )}
 
+        {/* Road alert coming up, or the one tapped on the map */}
+        {(opened ?? ahead?.alert) && (
+          <AlertBanner
+            key={(opened ?? ahead!.alert).id}
+            alert={opened ?? ahead!.alert}
+            distanceM={fix ? haversine(fix.position, [(opened ?? ahead!.alert).lon, (opened ?? ahead!.alert).lat]) : null}
+            timeZone={timeZone}
+            busy={busy === "vote"}
+            onVote={(still) => void voteAlert((opened ?? ahead!.alert).id, still)}
+            onClose={opened ? () => setOpenAlert(null) : undefined}
+          />
+        )}
+
         {/* Map */}
-        {route && (
+        {(route || fix) && (
           <section className="relative">
-            <MapView markers={markers} lines={lines} height="42vh" fitKey={route.id} follow={follow ? fix?.position ?? null : null} ariaLabel="Map of today's run" />
+            <MapView markers={markers} lines={lines} height="42vh" fitKey={route?.id ?? "no-route"} follow={follow ? fix?.position ?? null : null} ariaLabel={route ? "Map of today's run" : "Map of where you are"} />
             {fix && (
-              <div className="absolute bottom-3 left-3 flex gap-2">
-                <button className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm" onClick={() => setFollow((f) => !f)}>{follow ? "Show whole run" : "Follow me"}</button>
-                <span className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium tabular-nums shadow-sm">{now - fix.at > 15000 ? "No GPS" : `${Math.round(fix.kmh)} km/h`}</span>
+              <div className="absolute left-3 top-3 flex items-center gap-2">
+                <button className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm" onClick={() => setFollow((f) => !f)}>{follow ? (route ? "Show whole run" : "Stop following") : "Follow me"}</button>
+                <span className={`rounded-lg border bg-white px-3 py-2 text-sm font-medium tabular-nums shadow-sm ${gpsLive && limit != null && fix.kmh > limit + 2 ? "border-[#B42318] text-[#B42318]" : "border-line"}`}>{gpsLive ? `${Math.round(fix.kmh)} km/h` : "No GPS"}</span>
+                {limit != null && <LimitSign kmh={limit} over={gpsLive && fix.kmh > limit + 2} />}
               </div>
             )}
           </section>
         )}
+
+        {/* Report something on the road */}
+        {roadAlerts && (reporting ? (
+          <ReportPanel canReport={!!fix && gpsLive && fix.accuracy <= 100} busy={busy === "report"} onReport={(kind) => void reportAlert(kind)} onCancel={() => setReporting(false)} />
+        ) : reported ? (
+          <section className="card flex items-center justify-between gap-3 p-3">
+            <p className="text-sm"><span className="font-medium">{ROAD_ALERT_LABEL[reported.kind]} reported.</span> Other drivers are warned as they come near.</p>
+            <div className="flex shrink-0 gap-2">
+              <button className="btn-secondary btn-sm" disabled={busy === "vote"} onClick={() => void voteAlert(reported.id, false)}>Undo</button>
+              <button className="btn-secondary btn-sm" onClick={() => setReported(null)}>Done</button>
+            </div>
+          </section>
+        ) : (
+          <button className="btn-secondary w-full" onClick={() => setReporting(true)}>Report on the road</button>
+        ))}
 
         {/* Today's run */}
         {routes === null ? (

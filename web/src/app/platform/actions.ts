@@ -105,3 +105,13 @@ export async function linkIntegrations(formData: FormData) {
   revalidatePath("/platform");
   back(`/platform/tenants/${id}`, error ? { error: error.code === "23505" ? "That id is already linked to another company." : error.message } : { notice: "linked" });
 }
+
+/** The road alerts add-on for a company. */
+export async function setRoadAlerts(formData: FormData) {
+  const ctx = await requirePlatformAdmin();
+  const id = String(formData.get("tenant_id"));
+  const on = formData.get("enabled") === "true";
+  const { error } = await ctx.supabase.rpc("platform_set_road_alerts", { p_tenant_id: id, p_enabled: on });
+  revalidatePath("/platform");
+  back(`/platform/tenants/${id}`, error ? { error: error.message } : { notice: on ? "road-alerts-on" : "road-alerts-off" });
+}

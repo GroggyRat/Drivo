@@ -34,6 +34,7 @@ function ids(p: "a" | "b") {
     gpsBatch: id(p, "71"),
     trip: id(p, "72"),
     speedEvent: id(p, "73"),
+    roadAlert: id(p, "74"),
   };
 }
 
@@ -107,6 +108,8 @@ function tenantSql(p: "a" | "b"): string {
       ('${t.trip}', '${t.tenant}', '${t.driver1}', current_date - 1, 42000, 18000);
     insert into public.speed_events (id, tenant_id, driver_id, route_id, started_at, duration_s, max_speed_kmh, limit_kmh, point) values
       ('${t.speedEvent}', '${t.tenant}', '${t.driver1}', '${t.sentRoute}', now(), 14, 68, 50, ${pt(0, 0)});
+    insert into public.road_alerts (id, tenant_id, reported_by, kind, point, expires_at) values
+      ('${t.roadAlert}', '${t.tenant}', '${t.driver1}', 'police', ${pt(0.002, 0)}, now() + interval '2 hours');
     insert into public.segment_speeds (tenant_id, osm_way_id, forward, weekday, hour, sample_count, mean_speed_kmh) values
       ('${t.tenant}', 1000, true, 1, 8, 20, 32.5);
 

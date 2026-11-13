@@ -22,6 +22,7 @@ export default async function DriverPage() {
       tenantName={driver.tenant.name}
       driverName={driver.full_name}
       timeZone={driver.tenant.time_zone}
+      roadAlerts={driver.tenant.road_alerts_enabled}
     />
   );
 }

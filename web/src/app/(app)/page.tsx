@@ -14,7 +14,7 @@ export default async function LivePage() {
   return (
     <>
       <PageHeader title="Live operations" description={`Today, ${formatDate(new Date(), ctx.tenant.time_zone)}. Updates every few seconds.`} />
-      <LiveOps initial={snapshot} tenantId={ctx.tenant.id} timeZone={ctx.tenant.time_zone} />
+      <LiveOps initial={snapshot} tenantId={ctx.tenant.id} timeZone={ctx.tenant.time_zone} roadAlerts={ctx.tenant.road_alerts_enabled} />
     </>
   );
 }

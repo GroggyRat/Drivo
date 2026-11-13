@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 type TenantRow = {
   id: string; name: string; slug: string; status: "active" | "suspended"; created_at: string;
-  billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number;
+  billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number; road_alerts_enabled: boolean;
 };
 
 export default async function PlatformPage() {
@@ -38,7 +38,7 @@ export default async function PlatformPage() {
               <thead>
                 <tr>
                   <th scope="col">Company</th><th scope="col">Status</th><th scope="col">People</th><th scope="col">Drivers</th>
-                  <th scope="col">Vehicles</th><th scope="col">Routes, 30 days</th><th scope="col">Integrations</th><th scope="col">Since</th>
+                  <th scope="col">Vehicles</th><th scope="col">Routes, 30 days</th><th scope="col">Integrations</th><th scope="col">Add-ons</th><th scope="col">Since</th>
                 </tr>
               </thead>
               <tbody>
@@ -48,6 +48,7 @@ export default async function PlatformPage() {
                     <td>{t.status === "active" ? <Badge tone="green" icon>Active</Badge> : <Badge tone="red" icon>Suspended</Badge>}</td>
                     <td>{t.people}</td><td>{t.drivers}</td><td>{t.vehicles}</td><td>{t.routes_last_30_days}</td>
                     <td className="text-sm">{[t.billzilla_linked && "BillZilla", t.kaiworkforce_linked && "KaiWorkforce"].filter(Boolean).join(", ") || <span className="text-muted">None</span>}</td>
+                    <td className="text-sm">{t.road_alerts_enabled ? "Road alerts" : <span className="text-muted">None</span>}</td>
                     <td>{formatDate(t.created_at)}</td>
                   </tr>
                 ))}

@@ -16,7 +16,7 @@ export type MapMarker = {
   label?: string;
   /** Text inside the marker, for example a stop number. */
   text?: string;
-  kind?: "stop" | "depot" | "vehicle" | "pending" | "hazard" | "fuel" | "shop" | "selected" | "done";
+  kind?: "stop" | "depot" | "vehicle" | "pending" | "hazard" | "fuel" | "shop" | "selected" | "done" | "alert_hazard" | "alert_police" | "alert_camera";
   heading?: number | null;
   faded?: boolean;
   onClick?: () => void;
@@ -46,6 +46,16 @@ const MARKER_STYLE: Record<NonNullable<MapMarker["kind"]>, string> = {
   fuel: "background:#344054;color:#fff;border:2px solid #fff",
   shop: "background:#fff;color:#0b1f44;border:2px solid #0b1f44",
   selected: "background:#0b0b0c;color:#fff;border:3px solid #fff;box-shadow:0 0 0 2px #0b0b0c",
+  alert_hazard: "background:#93370d;color:#fff;border:2px solid #fff;box-shadow:0 0 0 2px #93370d",
+  alert_police: "background:#1e40af;color:#fff;border:2px solid #fff;box-shadow:0 0 0 2px #1e40af",
+  alert_camera: "background:#344054;color:#fff;border:2px solid #fff;box-shadow:0 0 0 2px #344054",
+};
+
+// Road alert symbols: a warning triangle, a shield and a camera.
+const ALERT_ICON: Partial<Record<NonNullable<MapMarker["kind"]>, string>> = {
+  alert_hazard: '<path d="M12 4 21 20H3z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.1" fill="#fff"/>',
+  alert_police: '<path d="M12 3 5 6v5c0 4.6 3 8.3 7 10 4-1.7 7-5.4 7-10V6z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15 10.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  alert_camera: '<rect x="3" y="7" width="18" height="13" rx="2.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M8.5 7 10 4.5h4L15.5 7" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.2" fill="none" stroke="#fff" stroke-width="2"/>',
 };
 
 // Town names for the built-in outline map, which has no labels of its own.
@@ -77,9 +87,13 @@ function markerElement(m: MapMarker) {
   el.type = "button";
   el.setAttribute("aria-label", m.label ?? m.text ?? "Map marker");
   if (m.label) el.title = m.label;
-  const size = m.kind === "vehicle" ? 22 : m.text ? 26 : 16;
-  el.style.cssText = `${MARKER_STYLE[m.kind ?? "stop"]};width:${size}px;height:${size}px;border-radius:${m.kind === "depot" ? "6px" : "999px"};display:flex;align-items:center;justify-content:center;font:600 12px 'IBM Plex Sans',sans-serif;cursor:${m.onClick ? "pointer" : "default"};opacity:${m.faded ? 0.45 : 1};padding:0`;
+  const icon = m.kind ? ALERT_ICON[m.kind] : undefined;
+  const size = icon ? 32 : m.kind === "vehicle" ? 22 : m.text ? 26 : 16;
+  el.style.cssText = `${MARKER_STYLE[m.kind ?? "stop"]};width:${size}px;height:${size}px;border-radius:${icon ? "8px" : m.kind === "depot" ? "6px" : "999px"};display:flex;align-items:center;justify-content:center;font:600 12px 'IBM Plex Sans',sans-serif;cursor:${m.onClick ? "pointer" : "default"};opacity:${m.faded ? 0.45 : 1};padding:0`;
+  // Vehicles stay on top, so a road alert pinned where a truck stands never hides it.
+  el.style.zIndex = m.kind === "vehicle" || m.kind === "selected" ? "3" : icon ? "1" : "2";
   if (m.text) el.textContent = m.text;
+  if (icon) el.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>`;
   if (m.kind === "vehicle" && m.heading != null) {
     const arrow = document.createElement("span");
     arrow.style.cssText = `position:absolute;top:-9px;left:50%;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid #2563eb;transform-origin:50% 20px;transform:translateX(-50%) rotate(${m.heading}deg)`;

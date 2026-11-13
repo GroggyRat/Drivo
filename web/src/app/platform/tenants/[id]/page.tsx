@@ -5,14 +5,15 @@ import { ConfirmSubmit, SubmitButton } from "@/components/buttons";
 import { Badge, Card, Field, Notice, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requirePlatformAdmin } from "@/lib/tenant";
-import { addPerson, linkIntegrations, setStatus } from "../../actions";
+import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
+import { addPerson, linkIntegrations, setRoadAlerts, setStatus } from "../../actions";
 
 export const metadata: Metadata = { title: "Company" };
 export const dynamic = "force-dynamic";
 
 type TenantRow = {
   id: string; name: string; slug: string; status: "active" | "suspended"; created_at: string;
-  billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number;
+  billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number; road_alerts_enabled: boolean;
 };
 type SP = Promise<{ notice?: string; error?: string; email?: string; password?: string }>;
 
@@ -22,6 +23,8 @@ const NOTICE: Record<string, string> = {
   suspended: "Suspended. Its people see nothing and cannot sign in to it. Nothing was deleted.",
   active: "Reactivated. Its people have access again.",
   linked: "Integration links saved.",
+  "road-alerts-on": `Road alerts turned on. Add ${ROAD_ALERTS_PRICE} to this company's bill.`,
+  "road-alerts-off": "Road alerts turned off. Its drivers no longer see or send road alerts.",
 };
 
 export default async function TenantPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
@@ -71,6 +74,23 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
             <Field label="BillZilla organisation id" htmlFor="bz" hint={t.billzilla_linked ? "Linked now" : "Not linked"}><input id="bz" name="billzilla_org_id" className="input" /></Field>
             <Field label="KaiWorkforce company id" htmlFor="kw" hint={t.kaiworkforce_linked ? "Linked now" : "Not linked"}><input id="kw" name="kaiworkforce_company_id" className="input" /></Field>
             <SubmitButton className="btn-secondary">Save links</SubmitButton>
+          </form>
+        </Card>
+
+        <Card title="Add-ons">
+          <form action={setRoadAlerts} className="space-y-3">
+            <input type="hidden" name="tenant_id" value={t.id} />
+            <input type="hidden" name="enabled" value={t.road_alerts_enabled ? "false" : "true"} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">Road alerts</p>
+              <p className="flex items-center gap-2 text-sm">{ROAD_ALERTS_PRICE} {t.road_alerts_enabled ? <Badge tone="green" icon>On</Badge> : <Badge tone="grey">Off</Badge>}</p>
+            </div>
+            <p className="text-sm text-muted">Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Reports are shared between every company with this add-on, without the driver&apos;s or the company&apos;s name. Drivo does not bill it for you: add it to the company&apos;s invoice.</p>
+            {t.road_alerts_enabled ? (
+              <ConfirmSubmit label="Turn off road alerts" title={`Turn off road alerts for ${t.name}?`} message="Its drivers will no longer see or send road alerts. Reports already made stay up for other companies until they expire." confirmLabel="Turn off" className="btn-secondary" />
+            ) : (
+              <SubmitButton pendingLabel="Turning on">Turn on road alerts</SubmitButton>
+            )}
           </form>
         </Card>
 

@@ -345,7 +345,7 @@ describe("people and tenant settings", () => {
     );
   });
 
-  it("Admins edit tenant details but not status, slug or the integration ids webhooks rely on", async () => {
+  it("Admins edit tenant details but not status, slug, paid add-ons or the integration ids webhooks rely on", async () => {
     const renamed = await asUser(client, A.admin, async (q) =>
       (await q.query("update public.tenants set name = 'Renamed', billzilla_enabled = true where id = $1", [A.tenant])).rowCount,
     );
@@ -355,6 +355,7 @@ describe("people and tenant settings", () => {
       "update public.tenants set slug = 'stolen' where id = $1",
       "update public.tenants set billzilla_org_id = 'someone-else' where id = $1",
       "update public.tenants set kaiworkforce_company_id = 'someone-else' where id = $1",
+      "update public.tenants set road_alerts_enabled = true where id = $1",
     ]) {
       await expectDenied(asUser(client, A.admin, (q) => q.query(sql, [A.tenant])));
     }

@@ -8,8 +8,11 @@ export type VehicleStatus = "moving" | "stopped" | "over_limit" | "no_signal" | 
 export type LiveVehicle = {
   driverId: string;
   driverName: string;
+  phone: string | null;
+  email: string | null;
   vehicleId: string | null;
   plate: string | null;
+  vehicleModel: string | null;
   routeId: string | null;
   routeName: string | null;
   position: [number, number] | null;
@@ -20,6 +23,8 @@ export type LiveVehicle = {
   stopsDone: number;
   stopsTotal: number;
   nextStop: string | null;
+  /** When the driver's open shift started, if they are on shift. */
+  onShiftSince: string | null;
 };
 
 export type LiveAlert = {
@@ -48,15 +53,15 @@ const SIGNAL_LOST_MS = 10 * 60_000;
 export async function buildLiveSnapshot(supabase: SupabaseClient, tenant: Tenant): Promise<LiveSnapshot> {
   const today = todayIn(tenant.time_zone);
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
-  const [{ data: routes }, { data: people }, { data: vehicles }, { data: positions }, { data: alerts }] = await Promise.all([
+  const [{ data: routes }, { data: people }, { data: vehicles }, { data: positions }, { data: alerts }, { data: shifts }] = await Promise.all([
     supabase
       .from("routes")
       .select("id, name, status, driver_id, vehicle_id, planned_distance_m, geometry_geojson, route_stops(id, sequence, status, location:locations(name))")
       .eq("tenant_id", tenant.id)
       .eq("route_date", today)
       .in("status", ["sent", "in_progress", "completed"]),
-    supabase.from("memberships").select("user_id, full_name, role").eq("tenant_id", tenant.id),
-    supabase.from("vehicles").select("id, plate").eq("tenant_id", tenant.id),
+    supabase.from("memberships").select("user_id, full_name, role, phone, email").eq("tenant_id", tenant.id),
+    supabase.from("vehicles").select("id, plate, model").eq("tenant_id", tenant.id),
     supabase.from("driver_positions").select("driver_id, vehicle_id, route_id, recorded_at, lon, lat, speed_kmh, heading_deg").eq("tenant_id", tenant.id),
     supabase
       .from("speed_events")
@@ -65,10 +70,14 @@ export async function buildLiveSnapshot(supabase: SupabaseClient, tenant: Tenant
       .gte("started_at", since)
       .order("started_at", { ascending: false })
       .limit(50),
+    supabase.from("shifts").select("driver_id, started_at").eq("tenant_id", tenant.id).is("ended_at", null),
   ]);
 
   const name = new Map((people ?? []).map((p) => [p.user_id as string, p.full_name as string]));
+  const person = new Map((people ?? []).map((p) => [p.user_id as string, p]));
   const plate = new Map((vehicles ?? []).map((v) => [v.id as string, v.plate as string]));
+  const model = new Map((vehicles ?? []).map((v) => [v.id as string, (v.model as string | null) ?? null]));
+  const shiftStart = new Map((shifts ?? []).map((s) => [s.driver_id as string, s.started_at as string]));
   const now = Date.now();
   const recentAlertDrivers = new Set(
     (alerts ?? []).filter((a) => now - new Date(a.started_at).getTime() < 5 * 60_000).map((a) => a.driver_id as string),
@@ -101,8 +110,11 @@ export async function buildLiveSnapshot(supabase: SupabaseClient, tenant: Tenant
     return {
       driverId,
       driverName: name.get(driverId) ?? "Driver",
+      phone: (person.get(driverId)?.phone as string | null | undefined) ?? null,
+      email: (person.get(driverId)?.email as string | null | undefined) ?? null,
       vehicleId,
       plate: vehicleId ? plate.get(vehicleId) ?? null : null,
+      vehicleModel: vehicleId ? model.get(vehicleId) ?? null : null,
       routeId: route?.id ?? null,
       routeName: route?.name ?? null,
       position: pos ? [Number(pos.lon), Number(pos.lat)] : null,
@@ -113,6 +125,7 @@ export async function buildLiveSnapshot(supabase: SupabaseClient, tenant: Tenant
       stopsDone: done,
       stopsTotal: stops.length,
       nextStop: next?.location?.name ?? null,
+      onShiftSince: shiftStart.get(driverId) ?? null,
     };
   });
 
