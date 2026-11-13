@@ -114,6 +114,8 @@ function tenantSql(p: "a" | "b"): string {
     update public.tenant_billing set monthly_fee = 80, next_due_on = current_date + 10 where tenant_id = '${t.tenant}';
     insert into public.tenant_payments (id, tenant_id, amount, paid_on, due_on) values
       ('${t.payment}', '${t.tenant}', 80, current_date - 20, current_date - 20);
+    insert into public.xero_connections (tenant_id, xero_tenant_id, org_name, token_ciphertext, import_from) values
+      ('${t.tenant}', 'xero-org-${p}', '${name} Ltd', 'encrypted-tokens-${p}', current_date - 3);
     insert into public.segment_speeds (tenant_id, osm_way_id, forward, weekday, hour, sample_count, mean_speed_kmh) values
       ('${t.tenant}', 1000, true, 1, 8, 20, 32.5);
 

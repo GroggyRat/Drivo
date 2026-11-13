@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { disconnectXero, syncXero } from "@/lib/integrations/xero";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/tenant";
 
@@ -136,4 +137,21 @@ export async function saveFuelSettings(formData: FormData) {
     .update({ fuel_price_per_l: price ? Number(price) : null, idle_fuel_l_per_stop: idle })
     .eq("tenant_id", ctx.tenant.id);
   go("fuel", error ? { error: error.message } : { notice: "saved" });
+}
+
+/** "Sync from Xero now": read what changed in Xero since the last sync. */
+export async function syncXeroNow() {
+  const ctx = await requireAdmin();
+  const result = await syncXero(createAdminClient(), ctx.tenant.id);
+  revalidatePath("/orders");
+  revalidatePath("/plan");
+  if (result.ok) go("integrations", { notice: "xero-synced", count: String(result.stored) });
+  else go("integrations", { error: result.reason === "busy" ? "A Xero sync is already running. Try again in a minute." : result.reason === "not_connected" ? "Xero is not connected." : result.message ?? "Xero could not be reached." });
+}
+
+/** Disconnect Xero. Customers and invoices already brought in stay in Drivo. */
+export async function disconnectXeroNow() {
+  const ctx = await requireAdmin();
+  await disconnectXero(createAdminClient(), ctx.tenant.id);
+  go("integrations", { notice: "xero-disconnected" });
 }

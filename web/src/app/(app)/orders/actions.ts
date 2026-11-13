@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getBillzillaClient } from "@/lib/integrations/billzilla";
+import { syncXero } from "@/lib/integrations/xero";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireManager } from "@/lib/tenant";
 import { parseCsv } from "@/lib/csv";
+import { isSynced } from "@/lib/sources";
 import { PLACE_CHANGEABLE } from "./place";
 
 /** "Sync from BillZilla": pull confirmed invoices and store them like webhooks do. */
@@ -28,6 +30,19 @@ export async function syncFromBillzilla() {
   revalidatePath("/orders");
   revalidatePath("/plan");
   redirect(`/orders?notice=synced&count=${stored}${client.mode === "mock" ? "&mock=1" : ""}`);
+}
+
+/** "Sync from Xero": read what changed in Xero since the last sync. Dispatchers can run it too. */
+export async function syncFromXero() {
+  const ctx = await requireManager();
+  const result = await syncXero(createAdminClient(), ctx.tenant.id);
+  revalidatePath("/orders");
+  revalidatePath("/plan");
+  if (result.ok) redirect(`/orders?notice=xero-synced&count=${result.stored}`);
+  const message = result.reason === "busy" ? "A Xero sync is already running. Try again in a minute."
+    : result.reason === "not_connected" ? "Xero is not connected. An Owner or Admin connects it in Settings, Integrations."
+    : result.message ?? "Xero could not be reached.";
+  redirect(`/orders?error=${encodeURIComponent(message)}`);
 }
 
 const orderSchema = z.object({
@@ -195,7 +210,7 @@ const placeSchema = z.object({
 /**
  * Change where an invoice is delivered. Orders added in Drivo or imported move
  * on their own: they are given a customer of the same name at the new place.
- * BillZilla invoices cannot be edited in Drivo, so their customer is moved,
+ * BillZilla and Xero invoices cannot be edited in Drivo, so their customer is moved,
  * which moves that customer's other open invoices too.
  */
 export async function changeDeliveryPlace(orderId: string, formData: FormData) {
@@ -230,7 +245,7 @@ export async function changeDeliveryPlace(orderId: string, formData: FormData) {
     if (!loc) fail("Choose the place again");
   }
 
-  if (o.source === "billzilla") {
+  if (isSynced(o.source)) {
     if (!approved) {
       revalidatePath("/locations");
       redirect(`/orders?tab=needs-pin&notice=place-pending&customer=${encodeURIComponent(o.customer.name)}`);

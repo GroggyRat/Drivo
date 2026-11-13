@@ -142,3 +142,21 @@ Drivo keeps its own sign-in. Linking a KaiTech account is optional. The plan for
 ## Changes
 
 None yet.
+
+## Xero to Drivo
+
+Unlike BillZilla, Xero is connected by the company itself: an Owner or Admin chooses **Connect Xero** in Settings, Integrations, signs in to Xero and picks their organisation (OAuth 2.0, scopes `offline_access accounting.invoices.read accounting.contacts.read`). Drivo only reads from Xero.
+
+| Step | What happens |
+|---|---|
+| Connect | `GET /api/integrations/xero/connect` sends the Admin to Xero; `GET /api/integrations/xero/callback` swaps the code for tokens, encrypts them and stores the connection. One Xero organisation feeds one Drivo company. |
+| First sync | Sales invoices (`ACCREC`) dated from three days before connecting, with status `AUTHORISED` or `PAID`, become orders with `source = xero`. Drafts and bills are left out. |
+| Later syncs | Only what changed since the last sync (`If-Modified-Since`). `VOIDED` and `DELETED` invoices cancel the order, as a cancelled BillZilla invoice does. |
+| When | On a Xero webhook (`POST /api/integrations/xero/webhook`, signed with the app's webhook key), on **Sync from Xero**, and once a day with the outbox job. |
+| Customers | The Xero contact becomes the customer, with its phone and street address. It needs a pin before its invoices can be routed. |
+| Cartons | Xero has no cartons, so cartons is the total of the line quantities, rounded up. |
+| Disconnect | Removes the connection at Xero and in Drivo. Customers and invoices already brought in stay. |
+
+Settings on the server: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET` and `XERO_WEBHOOK_KEY`, from the app registered at developer.xero.com. The app's redirect URI is `https://<drivo domain>/api/integrations/xero/callback` and its webhook URL is `https://<drivo domain>/api/integrations/xero/webhook` (invoices and contacts).
+
+Not built yet: sending the delivery result back to the Xero invoice, and fetching the invoice PDF.

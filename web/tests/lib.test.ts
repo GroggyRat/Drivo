@@ -4,6 +4,8 @@ import { formatDate, formatDistance, formatDuration, formatTime, todayIn } from 
 import { estimateFuel, fuelFormula } from "@/lib/fuel";
 import { boundsOf, haversine } from "@/lib/geo";
 import { linkSecret, sign, signedHeaders, verify } from "@/lib/hmac";
+import { contactAddress, contactPhone, decryptTokens, encryptTokens, jwtClaim, mapInvoice, validXeroSignature, xeroDate, type XeroInvoice } from "@/lib/integrations/xero-core";
+import { createHmac } from "node:crypto";
 import { estimateKmh, type SpeedSample } from "@/app/driver/navigation";
 import { buildOption, EstimateRoutingProvider, orderStops } from "@/lib/routing/estimate";
 
@@ -129,5 +131,80 @@ describe("estimateKmh", () => {
     estimateKmh(recent, at(-18.1, 0), null);
     expect(estimateKmh(recent, at(-18.10003, 5000), null)).toBe(0);
     expect(estimateKmh(recent, at(-18.09, 6000, 120), null)).toBeNull();
+  });
+});
+
+describe("Xero", () => {
+  const invoice: XeroInvoice = {
+    InvoiceID: "inv-1", InvoiceNumber: "INV-0042", Type: "ACCREC", Status: "AUTHORISED", DateString: "2026-11-13T00:00:00", CurrencyCode: "FJD", Total: 184.5,
+    Contact: { ContactID: "c-1", Name: "Samabula Mini Mart" },
+    LineItems: [{ Description: "Rice 10 kg", Quantity: 6, ItemCode: "RICE-10" }, { Description: "Oil 4 L", Quantity: 2.5 }, { Description: "", Quantity: 0 }],
+  };
+  const contact = {
+    ContactID: "c-1", Name: "Samabula Mini Mart Ltd",
+    Phones: [{ PhoneType: "DEFAULT", PhoneNumber: "3310000", PhoneAreaCode: "", PhoneCountryCode: "679" }, { PhoneType: "MOBILE", PhoneNumber: "9990142", PhoneCountryCode: "+679" }, { PhoneType: "FAX", PhoneNumber: "" }],
+    Addresses: [{ AddressType: "POBOX", AddressLine1: "PO Box 12", City: "Suva" }, { AddressType: "STREET", AddressLine1: "14 Ratu Mara Road", City: "Samabula", Region: "Suva" }],
+  };
+
+  it("turns an approved sales invoice into a delivery, with cartons from the quantities", () => {
+    expect(mapInvoice(invoice, "2026-11-10", new Map([["c-1", contact]]))).toEqual({
+      id: "inv-1", number: "INV-0042", status: "AUTHORISED", date: "2026-11-13T00:00:00Z", currency: "FJD", total: "184.50", cartons: 9,
+      lines: [{ sku: "RICE-10", description: "Rice 10 kg", quantity: 6, unit: null }, { sku: null, description: "Oil 4 L", quantity: 2.5, unit: null }],
+      customer: { id: "c-1", name: "Samabula Mini Mart Ltd", phone: "+679 9990142", address: "14 Ratu Mara Road, Samabula, Suva" },
+    });
+  });
+
+  it("uses the invoice's own customer name when the contact was not fetched", () => {
+    expect(mapInvoice(invoice, "2026-11-10")).toMatchObject({ customer: { id: "c-1", name: "Samabula Mini Mart", phone: null, address: null } });
+  });
+
+  it("leaves out bills, drafts, invoices from before connecting and invoices with no customer", () => {
+    expect(mapInvoice({ ...invoice, Type: "ACCPAY" }, "2026-11-10")).toBeNull();
+    expect(mapInvoice({ ...invoice, Status: "DRAFT" }, "2026-11-10")).toBeNull();
+    expect(mapInvoice({ ...invoice, Status: "SUBMITTED" }, "2026-11-10")).toBeNull();
+    expect(mapInvoice(invoice, "2026-11-14")).toBeNull();
+    expect(mapInvoice({ ...invoice, Contact: null }, "2026-11-10")).toBeNull();
+    expect(mapInvoice({ ...invoice, Status: "PAID" }, "2026-11-13")).toMatchObject({ status: "PAID" });
+  });
+
+  it("passes voided and deleted invoices on as cancellations, whatever their date", () => {
+    expect(mapInvoice({ ...invoice, Status: "VOIDED", DateString: "2020-01-01T00:00:00" }, "2026-11-10")).toEqual({ id: "inv-1", status: "VOIDED" });
+    expect(mapInvoice({ ...invoice, Status: "DELETED" }, "2026-11-10")).toEqual({ id: "inv-1", status: "DELETED" });
+  });
+
+  it("picks the mobile then the main phone, and the street address", () => {
+    expect(contactPhone({ ContactID: "x", Phones: [{ PhoneType: "DEFAULT", PhoneNumber: "3310000", PhoneAreaCode: "3", PhoneCountryCode: "679" }] })).toBe("+679 3 3310000");
+    expect(contactPhone({ ContactID: "x", Phones: [{ PhoneType: "DEFAULT", PhoneNumber: " " }] })).toBeNull();
+    expect(contactAddress({ ContactID: "x", Addresses: [{ AddressType: "POBOX", AddressLine1: "PO Box 12", City: "Suva" }] })).toBe("PO Box 12, Suva");
+    expect(contactAddress(undefined)).toBeNull();
+  });
+
+  it("accepts only webhooks signed with the app's key", () => {
+    const body = JSON.stringify({ events: [], firstEventSequence: 0, lastEventSequence: 0, entropy: "ABC" });
+    const good = createHmac("sha256", "webhook-key").update(body).digest("base64");
+    expect(validXeroSignature("webhook-key", body, good)).toBe(true);
+    expect(validXeroSignature("webhook-key", body + " ", good)).toBe(false);
+    expect(validXeroSignature("other-key", body, good)).toBe(false);
+    expect(validXeroSignature("webhook-key", body, null)).toBe(false);
+    expect(validXeroSignature("", body, createHmac("sha256", "").update(body).digest("base64"))).toBe(false);
+  });
+
+  it("encrypts tokens so they only open with the same secret and have not been changed", () => {
+    const tokens = { access_token: "a.b.c", refresh_token: "refresh-123", expires_at: 1_800_000_000_000 };
+    const stored = encryptTokens("client-secret", tokens);
+    expect(stored).not.toContain("refresh-123");
+    expect(encryptTokens("client-secret", tokens)).not.toBe(stored);
+    expect(decryptTokens("client-secret", stored)).toEqual(tokens);
+    expect(() => decryptTokens("another-secret", stored)).toThrow();
+    const parts = stored.split(".");
+    parts[3] = Buffer.from("tampered").toString("base64");
+    expect(() => decryptTokens("client-secret", parts.join("."))).toThrow();
+  });
+
+  it("reads the auth event from a token and writes Xero's date form", () => {
+    const token = `x.${Buffer.from(JSON.stringify({ authentication_event_id: "evt-9" })).toString("base64url")}.y`;
+    expect(jwtClaim(token, "authentication_event_id")).toBe("evt-9");
+    expect(jwtClaim("not-a-token", "authentication_event_id")).toBeNull();
+    expect(xeroDate("2026-11-05")).toBe("DateTime(2026,11,5)");
   });
 });

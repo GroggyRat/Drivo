@@ -1,3 +1,4 @@
+import { sourceLabel } from "@/lib/sources";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SubmitButton } from "@/components/buttons";
@@ -5,7 +6,7 @@ import { IconSync } from "@/components/icons";
 import { Badge, Card, EmptyState, Field, Notice, PageHeader, StatusBadge, TableWrap, Tabs } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/format";
 import { requireManager } from "@/lib/tenant";
-import { importOrders, syncFromBillzilla } from "./actions";
+import { importOrders, syncFromBillzilla, syncFromXero } from "./actions";
 import { DeliveryForm } from "./DeliveryForm";
 import { PLACE_CHANGEABLE } from "./place";
 
@@ -26,6 +27,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     .limit(500);
   type Row = { id: string; reference: string; source: string; invoice_pdf_path: string | null; customer_name: string; cartons: number; total_amount: string | null; currency: string; delivery_status: string; confirmed_at: string | null; created_at: string; customer: { id: string; location: { name: string; status: string } | null } | null };
   const rows = (data ?? []) as unknown as Row[];
+  const { data: xero } = await ctx.supabase.from("xero_connections").select("org_name").eq("tenant_id", ctx.tenant.id).maybeSingle();
   const located = (r: Row) => r.customer?.location?.status === "approved";
   const ready = rows.filter((r) => ["ready", "failed"].includes(r.delivery_status) && located(r));
   const needsPin = rows.filter((r) => ["ready", "failed"].includes(r.delivery_status) && !located(r));
@@ -41,17 +43,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     <>
       <PageHeader
         title="Ready for delivery"
-        description={ctx.tenant.billzilla_enabled ? "Confirmed BillZilla invoices arrive here automatically. Orders added in Drivo appear here too." : "Add each delivery with its place and invoice PDF, or import a spreadsheet."}
+        description={ctx.tenant.billzilla_enabled ? "Confirmed BillZilla invoices arrive here automatically. Orders added in Drivo appear here too." : xero ? `Approved sales invoices from Xero (${xero.org_name}) arrive here on their own. Deliveries added in Drivo appear here too.` : "Add each delivery with its place and invoice PDF, or import a spreadsheet."}
         actions={
           <>
             {ctx.tenant.billzilla_enabled && (
               <form action={syncFromBillzilla}><SubmitButton className="btn-secondary" pendingLabel="Syncing"><IconSync /> Sync from BillZilla</SubmitButton></form>
+            )}
+            {xero && (
+              <form action={syncFromXero}><SubmitButton className="btn-secondary" pendingLabel="Syncing"><IconSync /> Sync from Xero</SubmitButton></form>
             )}
             <Link href="/plan" className="btn-primary">Plan route</Link>
           </>
         }
       />
       {sp.notice === "synced" && <div className="mb-4"><Notice tone="green">Checked BillZilla: {sp.count} confirmed invoice{sp.count === "1" ? "" : "s"} stored or updated.{sp.mock ? " (BillZilla is not connected yet; these are sample invoices.)" : ""}</Notice></div>}
+      {sp.notice === "xero-synced" && <div className="mb-4"><Notice tone="green">Checked Xero: {sp.count} invoice{sp.count === "1" ? "" : "s"} stored or updated.</Notice></div>}
       {sp.notice === "not-linked" && <div className="mb-4"><Notice tone="amber">This company is not linked to BillZilla. KaiTech links it on request.</Notice></div>}
       {sp.notice === "added" && <div className="mb-4"><Notice tone={sp.pending ? "amber" : "green"}>{sp.pending ? "Delivery added. The new place is waiting for an Owner or Admin to approve it on Locations; it can be routed after that." : "Delivery added. It is ready to plan."}</Notice></div>}
       {sp.notice === "place-changed" && <div className="mb-4"><Notice tone={sp.pending ? "amber" : "green"}>{sp.pending ? "Place changed. The new place is waiting for an Owner or Admin to approve it on Locations; the invoice can be routed after that." : "Place changed. Plan the route again if this invoice was already in a plan you had open."}</Notice></div>}
@@ -104,7 +110,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
                       <td>{r.cartons}</td>
                       <td>{formatMoney(r.total_amount, r.currency)}</td>
                       <td>{formatDate(r.confirmed_at ?? r.created_at, ctx.tenant.time_zone)}</td>
-                      <td>{r.source === "billzilla" ? "BillZilla" : r.source === "csv" ? "Import" : "Drivo"}</td>
+                      <td>{sourceLabel(r.source)}</td>
                       <td>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           {located(r) ? <span>{r.customer?.location?.name}</span> : <Badge tone="amber" icon>Needs a pin</Badge>}

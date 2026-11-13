@@ -6,20 +6,22 @@ import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
 import { fuelFormula } from "@/lib/fuel";
 import { requireManager } from "@/lib/tenant";
 import { LocationPicker } from "../locations/LocationPicker";
-import { addDepot, addPerson, saveFuelSettings, saveSpeedSettings, saveVehicle, setDepotActive, setPersonActive, setVehicleActive, updatePerson } from "./actions";
+import { addDepot, addPerson, saveFuelSettings, saveSpeedSettings, saveVehicle, setDepotActive, setPersonActive, setVehicleActive, updatePerson, disconnectXeroNow, syncXeroNow } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 const ROLE = { owner: "Owner", admin: "Admin", dispatcher: "Dispatcher", driver: "Driver" } as const;
-type SP = Promise<{ tab?: string; notice?: string; error?: string; email?: string; password?: string }>;
+type SP = Promise<{ tab?: string; notice?: string; error?: string; email?: string; password?: string; count?: string }>;
+
+const plural = (count: string | undefined) => `${count ?? 0} invoice${count === "1" ? "" : "s"}`;
 
 export default async function SettingsPage({ searchParams }: { searchParams: SP }) {
   const ctx = await requireManager();
   const sp = await searchParams;
   const tab = sp.tab ?? "people";
   const t = ctx.tenant.id;
-  const [{ data: people }, { data: vehicles }, { data: depots }, { data: settings }, { data: zones }, { data: outbox }, { data: billing }] = await Promise.all([
+  const [{ data: people }, { data: vehicles }, { data: depots }, { data: settings }, { data: zones }, { data: outbox }, { data: billing }, { data: xero }] = await Promise.all([
     ctx.supabase.from("memberships").select("user_id, full_name, email, phone, role, active, kaiworkforce_employee_id").eq("tenant_id", t).order("full_name"),
     ctx.supabase.from("vehicles").select("*").eq("tenant_id", t).order("plate"),
     ctx.supabase.from("depots").select("id, name, address, lon, lat, active").eq("tenant_id", t).order("name"),
@@ -27,6 +29,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
     ctx.supabase.from("speed_zones").select("id, name, limit_kmh, active").eq("tenant_id", t).order("name"),
     ctx.supabase.from("integration_outbox").select("id, target_id, status, attempts, last_error, created_at").eq("tenant_id", t).neq("status", "sent").order("created_at", { ascending: false }).limit(20),
     ctx.supabase.from("tenant_billing").select("monthly_fee, next_due_on").eq("tenant_id", t).maybeSingle(),
+    ctx.supabase.from("xero_connections").select("org_name, import_from, connected_at, last_sync_at, last_sync_count, last_error").eq("tenant_id", t).maybeSingle(),
   ]);
   const readOnly = !ctx.isAdmin;
   const s = settings!;
@@ -41,7 +44,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
           </Notice>
         </div>
       )}
-      {sp.notice && !sp.password && <div className="mb-4"><Notice tone="green">{sp.notice === "added-existing" ? "Added. They already have a KaiTech account, so they sign in with their existing password." : sp.notice === "deactivated" ? "Access removed. Their history is kept." : "Saved."}</Notice></div>}
+      {sp.notice && !sp.password && <div className="mb-4"><Notice tone="green">{sp.notice === "added-existing" ? "Added. They already have a KaiTech account, so they sign in with their existing password." : sp.notice === "deactivated" ? "Access removed. Their history is kept." : sp.notice === "xero-connected" ? `Xero connected. ${plural(sp.count)} brought in so far; new ones arrive on their own.` : sp.notice === "xero-synced" ? `Checked Xero: ${plural(sp.count)} stored or updated.` : sp.notice === "xero-disconnected" ? "Xero disconnected. Customers and invoices already in Drivo stay." : "Saved."}</Notice></div>}
       {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}
       <Tabs
         current={tab}
@@ -271,6 +274,37 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
                   ))}
                 </ul>
               </div>
+            )}
+          </Card>
+          <Card title="Xero" actions={xero ? <Badge tone={xero.last_error ? "amber" : "green"} icon={!xero.last_error}>{xero.last_error ? "Needs attention" : "Connected"}</Badge> : <Badge tone="grey">Not connected</Badge>}>
+            {xero ? (
+              <>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  <dt className="text-muted">Organisation</dt>
+                  <dd>{xero.org_name}</dd>
+                  <dt className="text-muted">Connected</dt>
+                  <dd>{formatDate(xero.connected_at, ctx.tenant.time_zone)}, invoices dated from {formatDate(xero.import_from)}</dd>
+                  <dt className="text-muted">Last sync</dt>
+                  <dd>{xero.last_sync_at ? `${formatDateTime(xero.last_sync_at, ctx.tenant.time_zone)}, ${xero.last_sync_count ?? 0} invoice${xero.last_sync_count === 1 ? "" : "s"} stored or updated` : "Not yet"}</dd>
+                </dl>
+                {xero.last_error && <p role="alert" className="mt-3 rounded-[var(--radius-control)] bg-warn-bg px-3 py-2 text-sm text-warn">{xero.last_error}</p>}
+                <p className="mt-3 text-sm text-muted">Approved sales invoices arrive in Ready for delivery, and voided ones are cancelled. Cartons are the total of the quantities on the invoice. Drivo only reads from Xero; it changes nothing there.</p>
+                {!readOnly && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <form action={syncXeroNow}><SubmitButton className="btn-secondary" pendingLabel="Syncing">Sync from Xero now</SubmitButton></form>
+                    <form action={disconnectXeroNow}>
+                      <ConfirmSubmit label="Disconnect Xero" title="Disconnect Xero?" message="New invoices stop arriving. Customers and invoices already in Drivo stay." confirmLabel="Disconnect" className="btn-secondary" />
+                    </form>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted">Connect your Xero organisation and approved sales invoices arrive in Ready for delivery on their own, with the customer and the items. Drivo only reads from Xero; it changes nothing there.</p>
+                {readOnly
+                  ? <p className="mt-3 text-sm text-muted">An Owner or Admin can connect Xero.</p>
+                  : <a className="btn-primary mt-3" href="/api/integrations/xero/connect">Connect Xero</a>}
+              </>
             )}
           </Card>
           {billing && (

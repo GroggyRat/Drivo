@@ -1,3 +1,4 @@
+import { isSynced, sourceLabel } from "@/lib/sources";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card, Notice, PageHeader } from "@/components/ui";
@@ -20,7 +21,7 @@ export default async function ChangePlacePage({ params, searchParams }: { params
   const order = data as unknown as { id: string; reference: string; source: string; customer_name: string; delivery_status: string; customer: { id: string; name: string; location: { id: string; name: string; status: string } | null } };
   const { data: places } = await ctx.supabase.from("locations").select("id, name, lon, lat")
     .eq("tenant_id", ctx.tenant.id).eq("type", "shop").eq("status", "approved").order("name");
-  const { count: others } = order.source === "billzilla"
+  const { count: others } = isSynced(order.source)
     ? await ctx.supabase.from("orders").select("id", { count: "exact", head: true })
         .eq("tenant_id", ctx.tenant.id).eq("customer_id", order.customer.id).neq("id", order.id).in("delivery_status", PLACE_CHANGEABLE)
     : { count: 0 };
@@ -36,9 +37,9 @@ export default async function ChangePlacePage({ params, searchParams }: { params
           <Notice tone="amber">This invoice is on a route or already finished, so its place cannot change here. If the route has not started, take the invoice off the route first.</Notice>
         ) : (
           <>
-            {order.source === "billzilla" && (
+            {isSynced(order.source) && (
               <Notice tone="blue">
-                This is a BillZilla invoice, so Drivo changes the place for the customer {order.customer.name}.
+                This is a {sourceLabel(order.source)} invoice, so Drivo changes the place for the customer {order.customer.name}.
                 {others ? ` Their ${others} other invoice${others === 1 ? "" : "s"} waiting for delivery will go there too.` : ""}
               </Notice>
             )}
