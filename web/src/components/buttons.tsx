@@ -43,7 +43,8 @@ export function ConfirmSubmit({ label, title, message, confirmLabel, className =
             <div className="mt-2 text-muted">{message}</div>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setOpen(false)} autoFocus>Keep it</button>
-              <button type="submit" className="btn-danger" onClick={() => setOpen(false)}>{confirmLabel}</button>
+              {/* Submit before closing: once the dialog closes this button is gone, and a button that has left the page submits nothing. */}
+              <button type="button" className="btn-danger" onClick={(e) => { e.currentTarget.form?.requestSubmit(); setOpen(false); }}>{confirmLabel}</button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ConfirmSubmit, SubmitButton } from "@/components/buttons";
 import { Badge, Card, Field, Notice, PageHeader, TableWrap, Tabs } from "@/components/ui";
-import { formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
 import { fuelFormula } from "@/lib/fuel";
 import { requireManager } from "@/lib/tenant";
@@ -19,13 +19,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
   const sp = await searchParams;
   const tab = sp.tab ?? "people";
   const t = ctx.tenant.id;
-  const [{ data: people }, { data: vehicles }, { data: depots }, { data: settings }, { data: zones }, { data: outbox }] = await Promise.all([
+  const [{ data: people }, { data: vehicles }, { data: depots }, { data: settings }, { data: zones }, { data: outbox }, { data: billing }] = await Promise.all([
     ctx.supabase.from("memberships").select("user_id, full_name, email, phone, role, active, kaiworkforce_employee_id").eq("tenant_id", t).order("full_name"),
     ctx.supabase.from("vehicles").select("*").eq("tenant_id", t).order("plate"),
     ctx.supabase.from("depots").select("id, name, address, lon, lat, active").eq("tenant_id", t).order("name"),
     ctx.supabase.from("tenant_settings").select("*").eq("tenant_id", t).single(),
     ctx.supabase.from("speed_zones").select("id, name, limit_kmh, active").eq("tenant_id", t).order("name"),
     ctx.supabase.from("integration_outbox").select("id, target_id, status, attempts, last_error, created_at").eq("tenant_id", t).neq("status", "sent").order("created_at", { ascending: false }).limit(20),
+    ctx.supabase.from("tenant_billing").select("monthly_fee, next_due_on").eq("tenant_id", t).maybeSingle(),
   ]);
   const readOnly = !ctx.isAdmin;
   const s = settings!;
@@ -272,6 +273,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
               </div>
             )}
           </Card>
+          {billing && (
+            <Card title="Billing">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                <dt className="text-muted">Each month</dt>
+                <dd>{formatMoney(Number(billing.monthly_fee) + (ctx.tenant.road_alerts_enabled ? 25 : 0))}{ctx.tenant.road_alerts_enabled ? " with road alerts" : ""}</dd>
+                <dt className="text-muted">Next payment due</dt>
+                <dd>{billing.next_due_on ? formatDate(billing.next_due_on) : "Not set yet"}</dd>
+              </dl>
+              <p className="mt-2 text-sm text-muted">KaiTech sends your invoice and records your payments.</p>
+            </Card>
+          )}
           <Card title="Road alerts">
             <p>{ctx.tenant.road_alerts_enabled ? <Badge tone="green" icon>On</Badge> : <Badge tone="grey">Off</Badge>}</p>
             <p className="mt-2 text-sm text-muted">An add-on at {ROAD_ALERTS_PRICE}. Drivers report hazards, police checkpoints and speed cameras, and are warned as they come near one. Only your own drivers see them. KaiTech turns it on for a company on request.</p>

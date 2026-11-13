@@ -95,3 +95,67 @@ describe("platform functions", () => {
     }
   });
 });
+
+describe("billing", () => {
+  const billing = async () =>
+    asUser(client, PLATFORM_ADMIN, async (q) => (await q.query("select slug, monthly_total::float, next_due_on::text, days_until_due, months_due, amount_due::float, last_paid_amount::float from public.platform_billing() where slug in ('tenant-a', 'tenant-b') order by slug")).rows);
+  const today = async (offset = 0) => (await client.query("select (app.billing_today() + $1::int)::text as d", [offset])).rows[0].d;
+
+  it("lists every company with what is due and when", async () => {
+    const rows = await billing();
+    expect(rows[0]).toEqual({ slug: "tenant-a", monthly_total: 80, next_due_on: await today(10), days_until_due: 10, months_due: 0, amount_due: 0, last_paid_amount: 80 });
+  });
+
+  it("adds the road alerts add-on, counts a month for each due date passed, and moves on when paid", async () => {
+    const due = await today(-40);
+    await asUser(client, PLATFORM_ADMIN, async (q) => {
+      await q.query("select public.platform_set_road_alerts($1, true)", [A.tenant]);
+      await q.query("select public.platform_set_billing($1, 120, $2::date)", [A.tenant, due]);
+    }, { commit: true });
+    expect((await billing())[0]).toMatchObject({ monthly_total: 145, days_until_due: -40, months_due: 2, amount_due: 290 });
+    const next = await asUser(client, PLATFORM_ADMIN, async (q) =>
+      (await q.query("select public.platform_record_payment($1, 290, null, 2, 'Bank transfer 1182')::text as d", [A.tenant])).rows[0].d, { commit: true });
+    const row = (await billing())[0];
+    expect(row).toMatchObject({ next_due_on: next, months_due: 0, amount_due: 0, last_paid_amount: 290 });
+    expect(row.days_until_due).toBeGreaterThan(0);
+    const history = await asUser(client, PLATFORM_ADMIN, async (q) => (await q.query("select amount::float, months, reference from public.platform_tenant_payments($1)", [A.tenant])).rows);
+    expect(history[0]).toEqual({ amount: 290, months: 2, reference: "Bank transfer 1182" });
+  });
+
+  it("is closed to companies: Admins read their own billing and change nothing; drivers see none", async () => {
+    for (const sql of [
+      "select * from public.platform_billing()",
+      "select public.platform_set_billing($1, 0, null)",
+      "select public.platform_record_payment($1, 1)",
+      "select * from public.platform_tenant_payments($1)",
+      "update public.tenant_billing set monthly_fee = 0 where tenant_id = $1",
+      "delete from public.tenant_payments where tenant_id = $1",
+      "insert into public.tenant_payments (tenant_id, amount, paid_on) values ($1, 999, current_date)",
+    ]) {
+      await expectDenied(asUser(client, A.owner, (q) => q.query(sql, sql.includes("$1") ? [A.tenant] : [])));
+    }
+    const seen = (user: string) => asUser(client, user, async (q) => (await q.query("select tenant_id from public.tenant_billing")).rows.map((r) => r.tenant_id));
+    expect(await seen(A.admin)).toEqual([A.tenant]);
+    expect(await seen(A.driver1)).toEqual([]);
+    expect(await seen(A.dispatcher)).toEqual([]);
+  });
+});
+
+describe("deleting a company", () => {
+  it("needs the platform, a suspended company and its web name; then removes every row", async () => {
+    const del = (user: string, slug: string) => asUser(client, user, (q) => q.query("select public.platform_delete_tenant($1, $2)", [B.tenant, slug]), { commit: true });
+    await expectDenied(del(B.owner, "tenant-b"));
+    await expect(del(PLATFORM_ADMIN, "tenant-b")).rejects.toThrow(/Suspend the company/);
+    await asUser(client, PLATFORM_ADMIN, (q) => q.query("select public.platform_set_tenant_status($1, 'suspended')", [B.tenant]), { commit: true });
+    await expect(del(PLATFORM_ADMIN, "tenant-a")).rejects.toThrow(/does not match/);
+    await del(PLATFORM_ADMIN, " Tenant-B ");
+    const { rows } = await client.query("select table_name from information_schema.columns where table_schema = 'public' and column_name = 'tenant_id'");
+    for (const { table_name } of rows) {
+      const left = (await client.query(`select count(*)::int as n from public.${table_name} where tenant_id = $1`, [B.tenant])).rows[0].n;
+      expect({ table_name, left }).toEqual({ table_name, left: 0 });
+    }
+    expect((await client.query("select count(*)::int as n from public.tenants where id = $1", [A.tenant])).rows[0].n).toBe(1);
+    // The people keep their sign-in accounts.
+    expect((await client.query("select count(*)::int as n from auth.users where id = $1", [B.owner])).rows[0].n).toBe(1);
+  });
+});

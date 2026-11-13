@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Badge, Card, EmptyState, PageHeader, StatCard, TableWrap } from "@/components/ui";
+import { Badge, Card, EmptyState, Notice, PageHeader, StatCard, TableWrap } from "@/components/ui";
+import { dueLabel, type BillingRow } from "@/lib/billing";
 import { formatDate } from "@/lib/format";
 import { requirePlatformAdmin } from "@/lib/tenant";
 
@@ -10,9 +11,16 @@ type TenantRow = {
   billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number; road_alerts_enabled: boolean;
 };
 
-export default async function PlatformPage() {
+const NOTICE: Record<string, string> = {
+  deleted: "Company deleted, with its records and files.",
+  "deleted-files-left": "Company deleted. Some of its files could not be removed from storage; tell KaiTech support.",
+};
+
+export default async function PlatformPage({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
   const ctx = await requirePlatformAdmin();
-  const { data, error } = await ctx.supabase.rpc("platform_list_tenants");
+  const sp = await searchParams;
+  const [{ data, error }, { data: billing }] = await Promise.all([ctx.supabase.rpc("platform_list_tenants"), ctx.supabase.rpc("platform_billing")]);
+  const bills = new Map(((billing ?? []) as BillingRow[]).map((b) => [b.id, b]));
   const tenants = (data ?? []) as TenantRow[];
   const active = tenants.filter((t) => t.status === "active");
   return (
@@ -20,8 +28,10 @@ export default async function PlatformPage() {
       <PageHeader
         title="Companies"
         description="Every company using Drivo. You see counts only, never a company's routes, deliveries or locations."
-        actions={<Link href="/platform/new" className="btn-primary">New company</Link>}
+        actions={<><Link href="/platform/payments" className="btn-secondary">Payments</Link><Link href="/platform/new" className="btn-primary">New company</Link></>}
       />
+      {sp.notice && NOTICE[sp.notice] && <div className="mb-4"><Notice tone={sp.notice === "deleted" ? "green" : "amber"}>{NOTICE[sp.notice]}</Notice></div>}
+      {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}
       {error && <p className="mb-4 text-bad">Could not load companies: {error.message}</p>}
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Active companies" value={active.length} detail={`${tenants.length - active.length} suspended`} />
@@ -38,7 +48,7 @@ export default async function PlatformPage() {
               <thead>
                 <tr>
                   <th scope="col">Company</th><th scope="col">Status</th><th scope="col">People</th><th scope="col">Drivers</th>
-                  <th scope="col">Vehicles</th><th scope="col">Routes, 30 days</th><th scope="col">Integrations</th><th scope="col">Add-ons</th><th scope="col">Since</th>
+                  <th scope="col">Vehicles</th><th scope="col">Routes, 30 days</th><th scope="col">Integrations</th><th scope="col">Add-ons</th><th scope="col">Payment</th><th scope="col">Since</th>
                 </tr>
               </thead>
               <tbody>
@@ -49,6 +59,7 @@ export default async function PlatformPage() {
                     <td>{t.people}</td><td>{t.drivers}</td><td>{t.vehicles}</td><td>{t.routes_last_30_days}</td>
                     <td className="text-sm">{[t.billzilla_linked && "BillZilla", t.kaiworkforce_linked && "KaiWorkforce"].filter(Boolean).join(", ") || <span className="text-muted">None</span>}</td>
                     <td className="text-sm">{t.road_alerts_enabled ? "Road alerts" : <span className="text-muted">None</span>}</td>
+                    <td className="text-sm">{bills.get(t.id) ? <Badge tone={dueLabel(bills.get(t.id)!).tone}>{dueLabel(bills.get(t.id)!).text}</Badge> : null}</td>
                     <td>{formatDate(t.created_at)}</td>
                   </tr>
                 ))}

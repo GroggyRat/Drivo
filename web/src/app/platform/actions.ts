@@ -115,3 +115,77 @@ export async function setRoadAlerts(formData: FormData) {
   revalidatePath("/platform");
   back(`/platform/tenants/${id}`, error ? { error: error.message } : { notice: on ? "road-alerts-on" : "road-alerts-off" });
 }
+
+/** A company's monthly fee and the date its next payment is due. */
+export async function setBilling(formData: FormData) {
+  const ctx = await requirePlatformAdmin();
+  const id = String(formData.get("tenant_id"));
+  const path = `/platform/tenants/${id}`;
+  const parsed = z.object({
+    monthly_fee: z.coerce.number({ message: "Enter the monthly fee" }).min(0, "Enter a monthly fee of 0 or more").max(99999),
+    next_due_on: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, "Choose the next due date"),
+  }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) back(path, { error: parsed.error.issues[0].message });
+  const { error } = await ctx.supabase.rpc("platform_set_billing", {
+    p_tenant_id: id, p_monthly_fee: parsed.data!.monthly_fee, p_next_due_on: parsed.data!.next_due_on || null,
+  });
+  revalidatePath("/platform");
+  back(path, error ? { error: error.message } : { notice: "billing-saved" });
+}
+
+/** Record a payment received from a company. The next due date moves on by the months paid. */
+export async function recordPayment(formData: FormData) {
+  const ctx = await requirePlatformAdmin();
+  const id = String(formData.get("tenant_id"));
+  const path = `/platform/tenants/${id}`;
+  const parsed = z.object({
+    amount: z.coerce.number({ message: "Enter the amount paid" }).min(0, "Enter the amount paid").max(999999),
+    paid_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date it was paid"),
+    months: z.coerce.number().int().min(1, "Months must be 1 to 24").max(24, "Months must be 1 to 24"),
+    reference: z.string().trim().max(200).optional(),
+  }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) back(path, { error: parsed.error.issues[0].message });
+  const d = parsed.data!;
+  const { error } = await ctx.supabase.rpc("platform_record_payment", {
+    p_tenant_id: id, p_amount: d.amount, p_paid_on: d.paid_on, p_months: d.months, p_reference: d.reference || null,
+  });
+  revalidatePath("/platform");
+  back(path, error ? { error: error.message } : { notice: "payment-recorded" });
+}
+
+const TENANT_BUCKETS = ["location-photos", "delivery-proofs", "invoices"];
+
+/** Removes every file under a folder of a private bucket (file paths start with the company's id). */
+async function removeFolder(admin: ReturnType<typeof createAdminClient>, bucket: string, folder: string, depth = 0): Promise<void> {
+  if (depth > 6) return;
+  for (let round = 0; round < 200; round++) {
+    const { data } = await admin.storage.from(bucket).list(folder, { limit: 1000 });
+    if (!data?.length) return;
+    const files = data.filter((e) => e.id).map((e) => `${folder}/${e.name}`);
+    for (const dir of data.filter((e) => !e.id)) await removeFolder(admin, bucket, `${folder}/${dir.name}`, depth + 1);
+    if (files.length) await admin.storage.from(bucket).remove(files);
+    if (!files.length) return;
+  }
+}
+
+/**
+ * Delete a suspended company for good: its rows (through platform_delete_tenant,
+ * which checks the platform owner, the suspension and the typed web name) and
+ * then its photos, proofs and invoices. Sign-in accounts are kept.
+ */
+export async function deleteTenant(formData: FormData) {
+  const ctx = await requirePlatformAdmin();
+  const id = String(formData.get("tenant_id"));
+  if (!/^[0-9a-f-]{36}$/i.test(id)) back("/platform", { error: "Company not found" });
+  const { error } = await ctx.supabase.rpc("platform_delete_tenant", { p_tenant_id: id, p_confirm_slug: String(formData.get("confirm_slug") ?? "") });
+  if (error) back(`/platform/tenants/${id}`, { error: error.message });
+  let filesLeft = false;
+  try {
+    const admin = createAdminClient();
+    for (const bucket of TENANT_BUCKETS) await removeFolder(admin, bucket, id);
+  } catch {
+    filesLeft = true;
+  }
+  revalidatePath("/platform");
+  back("/platform", { notice: filesLeft ? "deleted-files-left" : "deleted" });
+}

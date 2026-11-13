@@ -15,6 +15,7 @@ Multi-tenant delivery routing and fleet tracking for Fiji distribution companies
 - Locations are written only through `submit_location`, `review_location` and `update_location`. Driver progress and proof of delivery will go through functions too, not direct table writes.
 - Integration ids that webhooks use to find a tenant (`billzilla_org_id`, `kaiworkforce_company_id`) are set only by `platform_link_tenant`.
 - Platform owners manage tenants only through the `platform_*` functions, which return counts, never tenant content.
+- Billing is a ledger the platform keeps (`tenant_billing`, `tenant_payments`): a monthly fee and the next due date, moved on by `platform_record_payment`. Drivo takes no money. A company is deleted only by `platform_delete_tenant`, which needs it suspended and its web name typed.
 - Road alerts (hazards, police checkpoints, speed cameras) are a paid add-on, `tenants.road_alerts_enabled`, set only by `platform_set_road_alerts`. They stay inside the tenant: drivers read them through `road_alerts_near`, which never returns the reporter, and writes go through `report_road_alert` and `vote_road_alert`. Tests in `supabase/tests/road-alerts.test.ts`.
 - Do not store one database row per GPS point. Phones upload batches (`gps_batches`); live positions go through Realtime Broadcast; the nightly job writes `trips` and archives raw points to R2.
 - Points are `geography(Point, 4326)` with longitude from -180 to 180. Fiji crosses the 180 degree meridian: test anything spatial with Taveuni and the Lau Group.

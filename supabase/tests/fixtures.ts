@@ -35,6 +35,7 @@ function ids(p: "a" | "b") {
     trip: id(p, "72"),
     speedEvent: id(p, "73"),
     roadAlert: id(p, "74"),
+    payment: id(p, "75"),
   };
 }
 
@@ -110,6 +111,9 @@ function tenantSql(p: "a" | "b"): string {
       ('${t.speedEvent}', '${t.tenant}', '${t.driver1}', '${t.sentRoute}', now(), 14, 68, 50, ${pt(0, 0)});
     insert into public.road_alerts (id, tenant_id, reported_by, kind, point, expires_at) values
       ('${t.roadAlert}', '${t.tenant}', '${t.driver1}', 'police', ${pt(0.002, 0)}, now() + interval '2 hours');
+    update public.tenant_billing set monthly_fee = 80, next_due_on = current_date + 10 where tenant_id = '${t.tenant}';
+    insert into public.tenant_payments (id, tenant_id, amount, paid_on, due_on) values
+      ('${t.payment}', '${t.tenant}', 80, current_date - 20, current_date - 20);
     insert into public.segment_speeds (tenant_id, osm_way_id, forward, weekday, hour, sample_count, mean_speed_kmh) values
       ('${t.tenant}', 1000, true, 1, 8, 20, 32.5);
 
