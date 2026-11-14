@@ -46,6 +46,32 @@ export async function addPerson(formData: FormData) {
   go("people", created.data.user ? { notice: "added", email: d.email, password } : { notice: "added-existing" });
 }
 
+/**
+ * Reset a person's password to a temporary one, shown once to the Owner or
+ * Admin to pass on. Same reach as editing a person: not yourself (use Change
+ * password), and only the Owner can reset the Owner. Refused when the person
+ * also belongs to another company, because the new password would open that
+ * company too; they use the reset email instead.
+ */
+export async function resetPassword(formData: FormData) {
+  const ctx = await requireAdmin();
+  const userId = String(formData.get("user_id"));
+  if (userId === ctx.userId) go("people", { error: "Use Change password for your own account." });
+  const admin = createAdminClient();
+  const { data: memberships } = await admin.from("memberships").select("tenant_id, role, email, full_name, active").eq("user_id", userId);
+  const here = (memberships ?? []).find((m) => m.tenant_id === ctx.tenant.id);
+  if (!here || !here.active) go("people", { error: "That person does not have access to this company." });
+  if (here!.role === "owner" && ctx.role !== "owner") go("people", { error: "Only the Owner can reset the Owner's password." });
+  const { data: platform } = await admin.from("platform_admins").select("user_id").eq("user_id", userId).maybeSingle();
+  if (platform || (memberships ?? []).some((m) => m.tenant_id !== ctx.tenant.id)) {
+    go("people", { error: `${here!.full_name} also uses this sign-in for another company, so it cannot be reset here. Ask them to use "Forgot password" on the sign-in page.` });
+  }
+  const password = randomBytes(9).toString("base64url");
+  const { error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error) go("people", { error: "Could not reset the password. Try again." });
+  go("people", { notice: "reset", email: here!.email ?? here!.full_name, password });
+}
+
 export async function updatePerson(formData: FormData) {
   const ctx = await requireAdmin();
   const userId = String(formData.get("user_id"));

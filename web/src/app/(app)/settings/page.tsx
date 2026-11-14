@@ -6,7 +6,7 @@ import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
 import { fuelFormula } from "@/lib/fuel";
 import { requireManager } from "@/lib/tenant";
 import { LocationPicker } from "../locations/LocationPicker";
-import { addDepot, addPerson, saveFuelSettings, saveSpeedSettings, saveVehicle, setDepotActive, setPersonActive, setVehicleActive, updatePerson, disconnectXeroNow, syncXeroNow } from "./actions";
+import { addDepot, addPerson, saveFuelSettings, saveSpeedSettings, saveVehicle, setDepotActive, resetPassword, setPersonActive, setVehicleActive, updatePerson, disconnectXeroNow, syncXeroNow } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -41,6 +41,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
         <div className="mb-4">
           <Notice tone="green">
             Account created for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person; they can sign in to the Drivo app with it now. It is not shown again.
+          </Notice>
+        </div>
+      )}
+      {sp.notice === "reset" && sp.password && (
+        <div className="mb-4">
+          <Notice tone="green">
+            Password reset for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person or by phone, and ask them to change it after signing in. It is not shown again.
           </Notice>
         </div>
       )}
@@ -89,6 +96,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
                         {!editable && <td>{p.kaiworkforce_employee_id ?? <span className="text-muted">None</span>}</td>}
                         <td>{p.active ? <Badge tone="green" icon>Active</Badge> : <Badge tone="grey">Removed</Badge>}</td>
                         <td className="text-right">
+                          {editable && p.active && (
+                            <form action={resetPassword} className="mb-2">
+                              <input type="hidden" name="user_id" value={p.user_id} />
+                              <ConfirmSubmit label="Reset password" title={`Reset ${p.full_name}'s password?`} message="Their current password stops working. You get a temporary password to give them, shown once." confirmLabel="Reset password" className="btn-secondary btn-sm" />
+                            </form>
+                          )}
                           {editable && (
                             <form action={setPersonActive}>
                               <input type="hidden" name="user_id" value={p.user_id} />

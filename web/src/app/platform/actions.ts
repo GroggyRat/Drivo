@@ -189,3 +189,26 @@ export async function deleteTenant(formData: FormData) {
   revalidatePath("/platform");
   back("/platform", { notice: filesLeft ? "deleted-files-left" : "deleted" });
 }
+
+/**
+ * Reset the password of a company's Owner or Admin, by email. The platform
+ * sees no list of a company's people, so the email is typed. Returns a
+ * temporary password, shown once.
+ */
+export async function resetAdminPassword(formData: FormData) {
+  await requirePlatformAdmin();
+  const tenantId = String(formData.get("tenant_id"));
+  const path = `/platform/tenants/${tenantId}`;
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) back(path, { error: "Enter the person's email" });
+  const admin = createAdminClient();
+  const { data: member } = await admin.from("memberships").select("user_id, role, active")
+    .eq("tenant_id", tenantId).ilike("email", email.replace(/[%_\\]/g, "\\$&")).in("role", ["owner", "admin"]).maybeSingle();
+  if (!member || !member.active) back(path, { error: "No active Owner or Admin of this company has that email. The company resets its dispatchers and drivers in Settings." });
+  const { data: platform } = await admin.from("platform_admins").select("user_id").eq("user_id", member!.user_id).maybeSingle();
+  if (platform) back(path, { error: "That is a platform owner's account. Use Change password or the reset email." });
+  const password = randomBytes(9).toString("base64url");
+  const { error } = await admin.auth.admin.updateUserById(member!.user_id as string, { password });
+  if (error) back(path, { error: "Could not reset the password. Try again." });
+  back(path, { notice: "reset", email, password });
+}

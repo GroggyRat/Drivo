@@ -7,7 +7,7 @@ import { formatDate, formatMoney, todayIn } from "@/lib/format";
 import { dueLabel, type BillingRow } from "@/lib/billing";
 import { requirePlatformAdmin } from "@/lib/tenant";
 import { ROAD_ALERTS_PRICE } from "@/lib/road-alerts";
-import { addPerson, deleteTenant, linkIntegrations, recordPayment, setBilling, setRoadAlerts, setStatus } from "../../actions";
+import { addPerson, resetAdminPassword, deleteTenant, linkIntegrations, recordPayment, setBilling, setRoadAlerts, setStatus } from "../../actions";
 
 export const metadata: Metadata = { title: "Company" };
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
         actions={<Link href="/platform" className="btn-secondary">All companies</Link>}
       />
       {sp.password && (
-        <div className="mb-4"><Notice tone="green">Account created for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person. It is not shown again.</Notice></div>
+        <div className="mb-4"><Notice tone="green">{sp.notice === "reset" ? "Password reset" : "Account created"} for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person. It is not shown again.</Notice></div>
       )}
       {sp.notice && !sp.password && NOTICE[sp.notice] && <div className="mb-4"><Notice tone={sp.notice === "suspended" ? "amber" : "green"}>{NOTICE[sp.notice]}</Notice></div>}
       {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}
@@ -74,6 +74,15 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
               <select id="role" name="role" className="input" defaultValue="admin"><option value="admin">Admin</option><option value="owner">Owner</option></select>
             </Field>
             <SubmitButton pendingLabel="Adding">Add person</SubmitButton>
+          </form>
+        </Card>
+
+        <Card title="Reset an Owner or Admin password">
+          <form action={resetAdminPassword} className="space-y-3">
+            <input type="hidden" name="tenant_id" value={t.id} />
+            <p className="text-sm text-muted">For an Owner or Admin who cannot get the reset email. Their current password stops working and you get a temporary one to give them, shown once. The company resets its own dispatchers and drivers in Settings.</p>
+            <Field label="Their email" htmlFor="reset_email"><input id="reset_email" name="email" type="email" className="input" autoComplete="off" required /></Field>
+            <ConfirmSubmit label="Reset password" title="Reset this person's password?" message="Their current password stops working straight away." confirmLabel="Reset password" className="btn-secondary" />
           </form>
         </Card>
 
