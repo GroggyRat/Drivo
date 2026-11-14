@@ -14,6 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -24,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import fj.kaitech.drivo.ui.screens.AccountScreen
 import fj.kaitech.drivo.ui.screens.ArrivedScreen
+import fj.kaitech.drivo.ui.screens.CrashScreen
 import fj.kaitech.drivo.ui.screens.DropPinScreen
 import fj.kaitech.drivo.ui.screens.LedgerScreen
 import fj.kaitech.drivo.ui.screens.MapScreen
@@ -42,7 +46,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             DrivoTheme {
                 val ui by vm.ui.collectAsState()
-                if (!ui.signedIn) SignInScreen(vm) else DriverApp(vm)
+                // If the app closed by itself last time, show why before anything else.
+                var crash by remember { mutableStateOf(CrashReport.read(this)) }
+                val report = crash
+                if (report != null) {
+                    CrashScreen(report) { CrashReport.clear(this); crash = null }
+                } else if (!ui.signedIn) SignInScreen(vm) else DriverApp(vm)
             }
         }
     }

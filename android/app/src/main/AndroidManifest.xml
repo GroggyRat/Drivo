@@ -48,6 +48,12 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Ferrostar's turn-by-turn notification while navigating. Ferrostar does not declare it itself. -->
+        <service
+            android:name="com.stadiamaps.ferrostar.core.service.FerrostarForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="fj.kaitech.drivo.files"

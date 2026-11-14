@@ -58,7 +58,14 @@ fun NavigationScreen(vm: MainViewModel, nav: NavController, stopId: String) {
     val route = ui.active ?: return
     val stop = route.stops.firstOrNull { it.id == stopId } ?: return
     val following = route.orderedStops.firstOrNull { it.sequence > stop.sequence && it.status == "scheduled" }
-    val core = remember { Navigation.core(context) }
+    // Setting up turn-by-turn loads Ferrostar's native code. If that fails on a phone, say so here
+    // (the driver can still tap Arrived on Today's run) rather than closing the app.
+    val setup = remember { runCatching { Navigation.core(context) } }
+    val core = setup.getOrNull()
+    if (core == null) {
+        NavigationUnavailable(setup.exceptionOrNull(), onBack = { nav.popBackStack() }, onArrived = { nav.navigate("arrived/$stopId") })
+        return
+    }
     var error by remember { mutableStateOf<String?>(null) }
     var muted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -116,5 +123,19 @@ fun NavigationScreen(vm: MainViewModel, nav: NavController, stopId: String) {
             Text(it, color = Color.White, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Drivo.Navy).padding(12.dp))
         }
+    }
+}
+
+/** Shown in place of the map when turn-by-turn cannot start on this phone. */
+@Composable
+private fun NavigationUnavailable(cause: Throwable?, onBack: () -> Unit, onArrived: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Directions could not start on this phone", style = MaterialTheme.typography.headlineSmall)
+        Text("You can still deliver: go back to Today's run, or tap Arrived when you are at the shop.", color = Drivo.Muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Back to Today's run", onBack, Modifier.weight(1f))
+            SecondaryButton("Arrived", onArrived, Modifier.weight(1f))
+        }
+        Text("For KaiTech: ${cause?.javaClass?.name ?: "unknown"}: ${cause?.message ?: ""}".take(600), color = Drivo.Muted, style = MaterialTheme.typography.bodySmall)
     }
 }

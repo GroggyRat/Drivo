@@ -21,6 +21,7 @@ class DrivoApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashReport.install(this)
         MapLibre.getInstance(this)
         supabase = createSupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY) {
             install(Auth) {
