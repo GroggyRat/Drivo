@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   const given = Buffer.from(url.searchParams.get("state") ?? "");
   const code = url.searchParams.get("code");
   if (!expected || !code || given.length !== expected.length || !timingSafeEqual(given, Buffer.from(expected)) || tenantId !== ctx.tenant.id) {
-    return settings({ error: "That Xero sign-in could not be matched to this page. Try Connect Xero again." });
+    return settings({ error: "That Xero sign-in took too long or was started in another tab, so it could not be matched. Click Connect Xero again and finish in the same tab." });
   }
 
   try {
