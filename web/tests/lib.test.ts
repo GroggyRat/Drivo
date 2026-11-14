@@ -6,6 +6,7 @@ import { boundsOf, haversine } from "@/lib/geo";
 import { linkSecret, sign, signedHeaders, verify } from "@/lib/hmac";
 import { contactAddress, contactPhone, decryptTokens, encryptTokens, jwtClaim, mapInvoice, validXeroSignature, xeroDate, type XeroInvoice } from "@/lib/integrations/xero-core";
 import { createHmac } from "node:crypto";
+import { signInEmail } from "@/lib/email-core";
 import { estimateKmh, type SpeedSample } from "@/app/driver/navigation";
 import { buildOption, EstimateRoutingProvider, orderStops } from "@/lib/routing/estimate";
 
@@ -206,5 +207,35 @@ describe("Xero", () => {
     expect(jwtClaim(token, "authentication_event_id")).toBe("evt-9");
     expect(jwtClaim("not-a-token", "authentication_event_id")).toBeNull();
     expect(xeroDate("2026-11-05")).toBe("DateTime(2026,11,5)");
+  });
+});
+
+describe("the sign-in email", () => {
+  const base = { name: "Salote Naivalu", companyName: "Nadera Distributors", email: "salote@nadera.test", password: "aB3-xY_9kLmn", signInUrl: "https://drivo.example/sign-in" };
+
+  it("tells a new person where to sign in, with their email and temporary password", () => {
+    const m = signInEmail({ kind: "created", ...base });
+    expect(m.subject).toBe("Your Drivo sign-in for Nadera Distributors");
+    expect(m.text).toContain("Hello Salote Naivalu,");
+    expect(m.text).toContain("An account has been made for you on Drivo for Nadera Distributors.");
+    expect(m.text).toContain("Sign in at: https://drivo.example/sign-in");
+    expect(m.text).toContain("Temporary password: aB3-xY_9kLmn");
+    expect(m.html).toContain("aB3-xY_9kLmn");
+  });
+
+  it("says the old password no longer works after a reset, and escapes names in the HTML", () => {
+    const m = signInEmail({ kind: "reset", ...base, name: "<b>Jo</b>", companyName: "R&D \"Ltd\"" });
+    expect(m.subject).toBe('Your Drivo password was reset for R&D "Ltd"');
+    expect(m.text).toContain("Your old password no longer works.");
+    expect(m.html).toContain("&lt;b&gt;Jo&lt;/b&gt;");
+    expect(m.html).toContain("R&amp;D &quot;Ltd&quot;");
+    expect(m.html).not.toContain("<b>Jo</b>");
+  });
+
+  it("works without a name or a company, and has no em dashes or exclamation marks", () => {
+    const m = signInEmail({ kind: "created", ...base, name: null, companyName: null });
+    expect(m.subject).toBe("Your Drivo sign-in");
+    expect(m.text.startsWith("Hello,")).toBe(true);
+    expect(m.text + m.html).not.toMatch(/[\u2014!]/);
   });
 });

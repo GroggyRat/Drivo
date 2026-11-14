@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { emailedParam, sendSignInEmail } from "@/lib/email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requirePlatformAdmin } from "@/lib/tenant";
 
@@ -27,6 +28,12 @@ async function ensureAccount(email: string, fullName: string) {
     if (!data || data.users.length < 200) break;
   }
   throw new Error("Could not create the sign-in account");
+}
+
+/** The company's name, for the email to its new or reset Owner or Admin. */
+async function companyName(tenantId: string): Promise<string | null> {
+  const { data } = await createAdminClient().from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  return (data?.name as string | undefined) ?? null;
 }
 
 const tenantSchema = z.object({
@@ -59,9 +66,9 @@ export async function createTenant(formData: FormData) {
   });
   revalidatePath("/platform");
   if (mErr) back(`/platform/tenants/${tenantId}`, { error: "Company created, but the Owner could not be added. Add them below." });
-  back(`/platform/tenants/${tenantId}`, account!.password
-    ? { notice: "created", email: d.owner_email, password: account!.password }
-    : { notice: "created-existing", email: d.owner_email });
+  if (!account!.password) back(`/platform/tenants/${tenantId}`, { notice: "created-existing", email: d.owner_email });
+  const sent = await sendSignInEmail({ kind: "created", name: d.owner_name, companyName: d.name, email: d.owner_email, password: account!.password! });
+  back(`/platform/tenants/${tenantId}`, { notice: "created", email: d.owner_email, password: account!.password!, ...emailedParam(sent) });
 }
 
 export async function addPerson(formData: FormData) {
@@ -83,7 +90,9 @@ export async function addPerson(formData: FormData) {
   }
   const { error } = await createAdminClient().from("memberships").insert({ tenant_id: tenantId, user_id: account!.userId, role: d.role, full_name: d.full_name, email: d.email });
   if (error) back(path, { error: error.code === "23505" ? (d.role === "owner" ? "This company already has an Owner, or this person is already in it." : "This person is already in the company.") : error.message });
-  back(path, account!.password ? { notice: "added", email: d.email, password: account!.password } : { notice: "added-existing", email: d.email });
+  if (!account!.password) back(path, { notice: "added-existing", email: d.email });
+  const sent = await sendSignInEmail({ kind: "created", name: d.full_name, companyName: await companyName(tenantId), email: d.email, password: account!.password! });
+  back(path, { notice: "added", email: d.email, password: account!.password!, ...emailedParam(sent) });
 }
 
 export async function setStatus(formData: FormData) {
@@ -202,7 +211,7 @@ export async function resetAdminPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) back(path, { error: "Enter the person's email" });
   const admin = createAdminClient();
-  const { data: member } = await admin.from("memberships").select("user_id, role, active")
+  const { data: member } = await admin.from("memberships").select("user_id, role, active, full_name")
     .eq("tenant_id", tenantId).ilike("email", email.replace(/[%_\\]/g, "\\$&")).in("role", ["owner", "admin"]).maybeSingle();
   if (!member || !member.active) back(path, { error: "No active Owner or Admin of this company has that email. The company resets its dispatchers and drivers in Settings." });
   const { data: platform } = await admin.from("platform_admins").select("user_id").eq("user_id", member!.user_id).maybeSingle();
@@ -210,5 +219,6 @@ export async function resetAdminPassword(formData: FormData) {
   const password = randomBytes(9).toString("base64url");
   const { error } = await admin.auth.admin.updateUserById(member!.user_id as string, { password });
   if (error) back(path, { error: "Could not reset the password. Try again." });
-  back(path, { notice: "reset", email, password });
+  const sent = await sendSignInEmail({ kind: "reset", name: (member!.full_name as string | null) ?? null, companyName: await companyName(tenantId), email, password });
+  back(path, { notice: "reset", email, password, ...emailedParam(sent) });
 }

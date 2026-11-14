@@ -16,7 +16,7 @@ type TenantRow = {
   id: string; name: string; slug: string; status: "active" | "suspended"; created_at: string;
   billzilla_linked: boolean; kaiworkforce_linked: boolean; people: number; drivers: number; vehicles: number; routes_last_30_days: number; road_alerts_enabled: boolean;
 };
-type SP = Promise<{ notice?: string; error?: string; email?: string; password?: string }>;
+type SP = Promise<{ notice?: string; error?: string; email?: string; password?: string; emailed?: string }>;
 
 const NOTICE: Record<string, string> = {
   "created-existing": "Company created. The Owner already has a KaiTech account and signs in with their own password.",
@@ -53,7 +53,7 @@ export default async function TenantPage({ params, searchParams }: { params: Pro
         actions={<Link href="/platform" className="btn-secondary">All companies</Link>}
       />
       {sp.password && (
-        <div className="mb-4"><Notice tone="green">{sp.notice === "reset" ? "Password reset" : "Account created"} for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person. It is not shown again.</Notice></div>
+        <div className="mb-4"><Notice tone="green">{sp.notice === "reset" ? "Password reset" : "Account created"} for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. {sp.emailed === "1" ? "It has also been emailed to them." : sp.emailed === "0" ? "The email to them could not be sent, so give it to them yourself." : "Give it to them in person."} It is not shown again.</Notice></div>
       )}
       {sp.notice && !sp.password && NOTICE[sp.notice] && <div className="mb-4"><Notice tone={sp.notice === "suspended" ? "amber" : "green"}>{NOTICE[sp.notice]}</Notice></div>}
       {sp.error && <div className="mb-4"><Notice tone="red">{sp.error}</Notice></div>}

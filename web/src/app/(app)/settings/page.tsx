@@ -12,7 +12,11 @@ export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 const ROLE = { owner: "Owner", admin: "Admin", dispatcher: "Dispatcher", driver: "Driver" } as const;
-type SP = Promise<{ tab?: string; notice?: string; error?: string; email?: string; password?: string; count?: string }>;
+type SP = Promise<{ tab?: string; notice?: string; error?: string; email?: string; password?: string; count?: string; emailed?: string }>;
+
+/** Whether the temporary password was also emailed to the person. */
+const emailedNote = (emailed: string | undefined) =>
+  emailed === "1" ? " It has also been emailed to them." : emailed === "0" ? " The email to them could not be sent, so give it to them yourself." : "";
 
 const plural = (count: string | undefined) => `${count ?? 0} invoice${count === "1" ? "" : "s"}`;
 
@@ -40,14 +44,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
       {sp.notice === "added" && sp.password && (
         <div className="mb-4">
           <Notice tone="green">
-            Account created for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person; they can sign in to the Drivo app with it now. It is not shown again.
+            Account created for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. They can sign in with it now.{emailedNote(sp.emailed) || " Give it to them in person."} It is not shown again.
           </Notice>
         </div>
       )}
       {sp.notice === "reset" && sp.password && (
         <div className="mb-4">
           <Notice tone="green">
-            Password reset for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>. Give it to them in person or by phone, and ask them to change it after signing in. It is not shown again.
+            Password reset for {sp.email}. Temporary password: <strong className="select-all">{sp.password}</strong>.{emailedNote(sp.emailed) || " Give it to them in person or by phone."} Ask them to change it after signing in. It is not shown again.
           </Notice>
         </div>
       )}

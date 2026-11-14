@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { disconnectXero, syncXero } from "@/lib/integrations/xero";
+import { emailedParam, sendSignInEmail } from "@/lib/email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/tenant";
 
@@ -43,7 +44,9 @@ export async function addPerson(formData: FormData) {
     phone: d.phone || null, kaiworkforce_employee_id: d.kaiworkforce_employee_id || null,
   });
   if (error) go("people", { error: error.code === "23505" ? "This person is already in your company" : "Could not add this person" });
-  go("people", created.data.user ? { notice: "added", email: d.email, password } : { notice: "added-existing" });
+  if (!created.data.user) go("people", { notice: "added-existing" });
+  const sent = await sendSignInEmail({ kind: "created", name: d.full_name, companyName: ctx.tenant.name, email: d.email, password });
+  go("people", { notice: "added", email: d.email, password, ...emailedParam(sent) });
 }
 
 /**
@@ -69,7 +72,8 @@ export async function resetPassword(formData: FormData) {
   const password = randomBytes(9).toString("base64url");
   const { error } = await admin.auth.admin.updateUserById(userId, { password });
   if (error) go("people", { error: "Could not reset the password. Try again." });
-  go("people", { notice: "reset", email: here!.email ?? here!.full_name, password });
+  const sent = here!.email ? await sendSignInEmail({ kind: "reset", name: here!.full_name, companyName: ctx.tenant.name, email: here!.email, password }) : false;
+  go("people", { notice: "reset", email: here!.email ?? here!.full_name, password, ...emailedParam(sent) });
 }
 
 export async function updatePerson(formData: FormData) {

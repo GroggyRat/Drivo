@@ -13,4 +13,5 @@ export const serverEnv = {
   billzillaWebhookSecret: process.env.BILLZILLA_WEBHOOK_SECRET ?? "",
   kaiworkforceWebhookSecret: process.env.KAIWORKFORCE_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
+  // Email (SMTP_USER, SMTP_PASS and friends) is read in src/lib/email.ts, Xero in src/lib/integrations/xero.ts.
 };
