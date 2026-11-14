@@ -23,13 +23,21 @@ private val fiji = ZoneId.of("Pacific/Fiji")
 fun timeOf(iso: String?): String = iso?.let { DateTimeFormatter.ofPattern("HH:mm").withZone(fiji).format(Instant.parse(it)) } ?: ""
 fun timeOf(ms: Long): String = DateTimeFormatter.ofPattern("HH:mm").withZone(fiji).format(Instant.ofEpochMilli(ms))
 
-/** One accurate fix for a proof of delivery or a dropped pin. */
+/** One accurate fix for a proof of delivery or a dropped pin. Null when location is not allowed or not available. */
 @SuppressLint("MissingPermission")
 suspend fun currentLocation(context: Context): Location? = suspendCancellableCoroutine { cont ->
-    LocationServices.getFusedLocationProviderClient(context)
-        .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-        .addOnSuccessListener { cont.resume(it) }
-        .addOnFailureListener { cont.resume(null) }
+    if (!fj.kaitech.drivo.tracking.TrackingService.hasLocationPermission(context)) {
+        cont.resume(null)
+        return@suspendCancellableCoroutine
+    }
+    try {
+        LocationServices.getFusedLocationProviderClient(context)
+            .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { cont.resume(it) }
+            .addOnFailureListener { cont.resume(null) }
+    } catch (e: SecurityException) {
+        cont.resume(null)
+    }
 }
 
 /**

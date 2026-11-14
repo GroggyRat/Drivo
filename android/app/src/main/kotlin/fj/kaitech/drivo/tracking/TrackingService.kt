@@ -1,5 +1,8 @@
 package fj.kaitech.drivo.tracking
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -82,8 +85,18 @@ class TrackingService : LifecycleService() {
             return START_NOT_STICKY
         }
         vehicleId = intent?.getStringExtra(EXTRA_VEHICLE) ?: vehicleId
-        ServiceCompat.startForeground(this, 1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        TrackingState.update { it.copy(tracking = true) }
+        // Android refuses a location service when location is not allowed for Drivo, or when the
+        // service is started while the app is not open (for example restarted by the system).
+        // Stop quietly and let Today's run ask the driver, in place of closing the app.
+        val started = hasLocationPermission(this) && runCatching {
+            ServiceCompat.startForeground(this, 1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        }.isSuccess
+        if (!started) {
+            TrackingState.update { it.copy(tracking = false, blocked = true) }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        TrackingState.update { it.copy(tracking = true, blocked = false) }
         requestUpdates()
         lifecycleScope.launch { prepare() }
         return START_STICKY
@@ -194,12 +207,23 @@ class TrackingService : LifecycleService() {
         const val ACTION_STOP = "fj.kaitech.drivo.STOP_TRACKING"
         const val EXTRA_VEHICLE = "vehicle_id"
 
+        fun hasLocationPermission(context: Context) =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        /** Starts sharing location. Without the location permission nothing starts, and the state says it is blocked. */
         fun start(context: Context, vehicleId: String?) {
-            context.startForegroundService(Intent(context, TrackingService::class.java).putExtra(EXTRA_VEHICLE, vehicleId))
+            if (!hasLocationPermission(context)) {
+                TrackingState.update { it.copy(tracking = false, blocked = true) }
+                return
+            }
+            runCatching {
+                context.startForegroundService(Intent(context, TrackingService::class.java).putExtra(EXTRA_VEHICLE, vehicleId))
+            }.onFailure { TrackingState.update { it.copy(tracking = false, blocked = true) } }
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, TrackingService::class.java).setAction(ACTION_STOP))
+            // Stopping a service that is not running, from the background, is refused by Android; that is fine.
+            runCatching { context.startService(Intent(context, TrackingService::class.java).setAction(ACTION_STOP)) }
         }
     }
 }

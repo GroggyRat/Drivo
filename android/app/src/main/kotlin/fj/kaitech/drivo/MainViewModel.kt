@@ -99,6 +99,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!shift.tracking && running) TrackingService.stop(getApplication())
     }
 
+    /** After the driver allows location: start sharing if the shift is open. */
+    fun retryTracking() {
+        TrackingState.update { it.copy(blocked = false) }
+        state.value.shift?.let { applyShift(it) } ?: refresh()
+    }
+
     /** Clock in and out in Drivo, for companies without KaiWorkforce. */
     fun clockIn() = clock { repo.clockIn() }
     fun clockOut() = clock { repo.clockOut() }

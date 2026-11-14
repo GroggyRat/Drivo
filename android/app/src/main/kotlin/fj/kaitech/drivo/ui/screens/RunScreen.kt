@@ -47,11 +47,27 @@ fun RunScreen(vm: MainViewModel, nav: NavController) {
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) vm.clockIn()
     }
 
+    val allowLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) vm.retryTracking()
+    }
+
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Today's run", style = MaterialTheme.typography.headlineSmall)
             if (!ui.online) Badge("No signal: showing the run saved at shift start", Tone.Amber)
             ui.message?.let { Text(it, color = Drivo.Bad) }
+        }
+        // On shift but not sharing: Android has location turned off for Drivo, or stopped it.
+        if (ui.shift?.tracking == true && !tracking.tracking) {
+            item {
+                Card {
+                    Text("Your location is not being shared", style = MaterialTheme.typography.titleMedium)
+                    Text("You are on shift, but location is not allowed for Drivo on this phone. Allow it so your dispatcher can see you and directions work. If nothing happens when you tap the button, open the phone's Settings, Apps, Drivo, Permissions, Location and choose Allow.", color = Drivo.Muted)
+                    PrimaryButton("Allow location", {
+                        allowLocation.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS))
+                    }, Modifier.fillMaxWidth())
+                }
+            }
         }
         ui.shift?.takeIf { it.clockInHere }?.let { shift ->
             item {

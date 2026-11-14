@@ -60,7 +60,12 @@ fun NavigationScreen(vm: MainViewModel, nav: NavController, stopId: String) {
     val following = route.orderedStops.firstOrNull { it.sequence > stop.sequence && it.status == "scheduled" }
     // Setting up turn-by-turn loads Ferrostar's native code. If that fails on a phone, say so here
     // (the driver can still tap Arrived on Today's run) rather than closing the app.
-    val setup = remember { runCatching { Navigation.core(context) } }
+    val setup = remember {
+        runCatching {
+            check(fj.kaitech.drivo.tracking.TrackingService.hasLocationPermission(context)) { "Location is not allowed for Drivo. Allow it on Today's run, then start directions again." }
+            Navigation.core(context)
+        }
+    }
     val core = setup.getOrNull()
     if (core == null) {
         NavigationUnavailable(setup.exceptionOrNull(), onBack = { nav.popBackStack() }, onArrived = { nav.navigate("arrived/$stopId") })

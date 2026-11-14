@@ -14,6 +14,8 @@ object TrackingState {
         val overLimit: Boolean = false,
         val alert: Boolean = false,
         val waitingBatches: Int = 0,
+        /** On shift, but Android would not let location sharing start (permission off, or the app was not open). */
+        val blocked: Boolean = false,
     )
 
     private val state = MutableStateFlow(Snapshot())
