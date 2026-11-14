@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Pages and endpoints that do not need a signed-in person. Integration
-// webhooks check their own signatures; the cron endpoint checks its secret.
-const PUBLIC_PREFIXES = ["/sign-in", "/forgot-password", "/auth/", "/basemap/", "/api/integrations/", "/api/navigation/", "/api/jobs/"];
+// webhooks check their own signatures; the cron endpoint checks its secret;
+// downloads are driver app builds shared by link, before a driver has signed in.
+const PUBLIC_PREFIXES = ["/sign-in", "/forgot-password", "/auth/", "/basemap/", "/api/integrations/", "/api/navigation/", "/api/jobs/", "/downloads/"];
 
 const isPublic = (pathname: string) => PUBLIC_PREFIXES.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
 
